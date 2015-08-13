@@ -13,7 +13,7 @@ requires = [
 
 setup(name='C3',
       version='1.0.0',
-      description='Cloud Cloud Cloud',
+      description='CloudCloudCloud',
       long_description=README + '\n\n' + CHANGELOG,
       classifiers=[
         "Programming Language :: Python",
