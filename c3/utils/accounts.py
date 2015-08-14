@@ -33,6 +33,7 @@ def get_account_name(account_id=None, mapfile=None):
         return False
     return translate_account(account_id=account_id, mapfile=mapfile)
 
+
 def get_account_id(account_name=None, mapfile=None):
     ''' Returns the AWS account ID. '''
     if account_name is None:
@@ -56,13 +57,13 @@ def translate_account(account_id=None, account_name=None, mapfile=None):
             (aws_name, aws_id) = line.split(":")[-2:3]
             if account_id:
                 if aws_id.rstrip() == account_id:
-                    return aws_name
+                    return aws_name.rstrip()
             elif account_name:
                 if aws_name.rstrip() == account_name:
-                    return aws_id
+                    return aws_id.rstrip()
     if account_id:
         msg = "ERROR: Couldn't translate ID %s" % account_id
     elif account_name:
-        msg = "ERROR: Couldn't translate ID %s" % account_id
+        msg = "ERROR: Couldn't translate account_name %s" % account_name
     print >> sys.stderr, msg
     return None
