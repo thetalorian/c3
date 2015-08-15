@@ -8,7 +8,8 @@ CHANGELOG = open(os.path.join(here, 'CHANGELOG.rst')).read()
 requires = [
     'boto==2.38.0',
     'moto==0.4.10',
-    'Zambi'
+    'Zambi',
+    'nvlib'
     ]
 
 setup(name='C3',

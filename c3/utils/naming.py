@@ -17,65 +17,66 @@ Library for CGM naming conventions
 '''
 
 import re
+import sys
 import c3.utils.accounts
-from c3.nvdb import NvDb
+from nvlib import Nventory
 
 
 def find_available_hostnames(group, count=1, account=None,
-                             region_or_az="us-east-1", domain=None):
+                             region="us-east-1", domain=None):
     '''
     Return the first <count> appropriate hostnames not already in nventory
     '''
     retnodes = list()
     nodes = list()
-    nvdb = NvDb()
+    nventory = Nventory(url='http://fakehost')
     if account is None:
         return False
     data = {
-        'loc': get_aws_dc(region_or_az),
+        'loc': get_aws_dc(region),
         'env': group[:3],
         'sclass': group[3:],
         'acct': account,
         'domain': domain}
-    node_data = nvdb.get_nodes(data)
-    for node in node_data:
-        nodes.append(node['name'])
+    node_data = nventory.get_nodes(data)
+    if node_data:
+        for node in node_data:
+            nodes.append(node['name'])
     num = 1
-    while num < 100:
-        possible = gen_hostname(group, num, account, region_or_az, domain)
+    max_attempts = 100
+    while len(retnodes) != count:
+        possible = gen_hostname(group, num, account, region, domain)
         if possible not in nodes:
             retnodes.append(possible)
-        if len(retnodes) == count:
-            return retnodes
-        num += 1
-    return None
+            if num == max_attempts:
+                msg = (
+                    'ERROR: Max attempts reached, stopping at %s' %
+                    max_attempts)
+                print >> sys.stderr, msg
+                break
+            num += 1
+    return retnodes
 
 
-def gen_hostname(group, num, account=None, region_or_az="us-east", domain=None):
-    '''
-    Return the CGM hostname if the SG uses the naming convention
-    >>> gen_hostname("devweb", 1, "prod")
-    'aws1devweb1.prod.ctgrd.com'
-    >>> gen_hostname("prdpxy", 3, "prodweb")
-    'aws1prdpxy3.prodweb.ctgrd.com'
-    '''
+def gen_hostname(group, num, account=None, region="us-east-1", domain=None):
+    ''' Return the CGM hostname if the SG uses the naming convention '''
     if domain is None:
         domain = "ctgrd.com"
     if re.search("^(prd|dev|prg|qat|sts|tst|utl|stg|sbx)[a-z][a-z][a-z]$",
                  group):
         return ("%s%s%d.%s.%s" %
-                (get_aws_dc(region_or_az), group, num, account, domain))
+                (get_aws_dc(region), group, num, account, domain))
     else:
         return False
 
 
-def get_aws_dc(region_or_az):
+def get_aws_dc(region):
     ''' Returns the CGM standard AWS datacenter. '''
-    if re.match('us-east-1', region_or_az):
+    if re.match('us-east-1', region):
         return 'aws1'
-    elif re.match('us-west-1', region_or_az):
+    elif re.match('us-west-1', region):
         return 'aws2'
-    elif re.match('eu-west-1', region_or_az):
+    elif re.match('eu-west-1', region):
         return "aws3"
     else:
         return False
