@@ -43,17 +43,10 @@ def find_available_hostnames(group, count=1, account=None,
         for node in node_data:
             nodes.append(node['name'])
     num = 1
-    max_attempts = 100
     while len(retnodes) != count:
         possible = gen_hostname(group, num, account, region, domain)
         if possible not in nodes:
             retnodes.append(possible)
-            if num == max_attempts:
-                msg = (
-                    'ERROR: Max attempts reached, stopping at %s' %
-                    max_attempts)
-                print >> sys.stderr, msg
-                break
             num += 1
     return retnodes
 
