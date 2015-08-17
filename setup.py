@@ -9,7 +9,8 @@ requires = [
     'boto==2.38.0',
     'moto==0.4.10',
     'Zambi',
-    'nvlib'
+    'nvlib',
+    'ipaddr',
     ]
 
 setup(name='C3',

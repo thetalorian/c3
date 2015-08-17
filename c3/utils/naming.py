@@ -16,6 +16,7 @@
 Library for CGM naming conventions
 '''
 
+import os
 import re
 import sys
 import c3.utils.accounts
@@ -85,3 +86,36 @@ def get_logging_bucket_name(account_id=None):
         return "cgs3log-%s" % account_name
     else:
         return False
+
+
+def get_cidr(net):
+    '''
+    Get the CIDR address from a network name
+    >>> getCIDR("DuPont-6")
+    '208.85.8.6/32'
+    '''
+    names = get_network_data()[1]
+    try:
+        return names[net]
+    except KeyError:
+        pass
+
+
+def get_network_data():
+    ''' Parse the network file for use by other methods '''
+    nets = dict()
+    names = dict()
+    if not os.getenv('AWS_BASE_DIR'):
+        print >> sys.stderr, 'WARN: AWS_BASE_DIR not set in env'
+        return False
+    net_file = '%s/%s' % (os.getenv('AWS_BASE_DIR'), 'etc/networks.txt')
+    try:
+        nfile = open(net_file, 'r')
+    except IOError, msg:
+        print >> sys.stderr, 'ERROR: %s' % msg
+        return False
+    for line in nfile.readlines():
+        ent = line.strip().split(":")
+        nets[ent[0]] = ent[1]
+        names[ent[1]] = ent[0]
+    return nets, names

@@ -4,6 +4,8 @@ import os
 import sys
 import c3.utils.accounts as c3accounts
 import c3.utils.naming as c3naming
+import c3.utils.jgp.gen_entry as c3gen_entry
+import c3.utils.jgp.statement as c3statement
 
 
 def test_get_account_name():
@@ -76,3 +78,72 @@ def test_get_logging_bucket_name():
     assert bucket == 'cgs3log-opsqa'
     bucket = c3naming.get_logging_bucket_name(account_id='123456789011')
     assert bucket == False
+
+
+def test_jgp_read_config():
+    ''' Test read_config in c3.utils.jgp '''
+    config = 'fake.ini'
+    assert c3gen_entry.read_config(config) == False
+    config = os.getcwd() + '/tests/opsqa-devzzz.ini'
+    ini = c3gen_entry.read_config(config)
+    assert ini.sections() == ['s3:get*,s3:list*', 's3:*',
+                              's3:putObject', 's3:badtest']
+
+
+def test_jgp_gen_s3_entry():
+    ''' Test gen_s3_entry in c3.utils.jgp '''
+    config = os.getcwd() + '/tests/opsqa-devzzz.ini'
+    ini = c3gen_entry.read_config(config)
+    entry = c3gen_entry.gen_s3_entry(ini, 'devzzz', 'opsqa')
+    assert entry == [
+        'Allow|s3:get*,s3:list*|devzzz|opsqa|mybucket/*|'\
+        'IpAddress,aws:SourceIp,216.1.187.128/27',
+        'Allow|s3:putObject|devzzz|opsqa|mybucket/foo/bar/baz|empty',
+        'Deny|s3:*|devzzz|opsqa|mybucket/foobar/barbaz|empty']
+
+def test_jgp_make_statement():
+    ''' Test make_statement in c3.utils.jgp.statement '''
+    statement = c3statement.make_statement(
+        '086441151436', 'root', 'cgm-cloudtrail/*',
+        's3:GetBucketAcl','Allow', 'empty')
+    assert statement == {
+        'Action': ['s3:GetBucketAcl'],
+        'Resource': ['arn:aws:s3:::cgm-cloudtrail/*'],
+        'Effect': 'Allow',
+        'Principal': {'AWS': ['arn:aws:iam::086441151436:root']}}
+    statement = c3statement.make_statement(
+        '086441151436','root',
+        'cgm-cloudtrail/AWSLogs/150620942615/*',
+        's3:PutObject','Allow',
+        'StringEquals,s3:x-amz-acl,bucket-owner-full-control')
+    assert statement == {
+        'Action': ['s3:PutObject'],
+        'Resource': ['arn:aws:s3:::cgm-cloudtrail/AWSLogs/150620942615/*'],
+        'Effect': 'Allow',
+        'Condition': {
+            'StringEquals': {'s3:x-amz-acl': 'bucket-owner-full-control'}},
+        'Principal': {'AWS': ['arn:aws:iam::086441151436:root']}}
+
+
+def test_jgp_do_principal():
+    ''' Test do_principal in c3.utils.jgp.statement '''
+    statement = c3statement.do_principal('cidr-networks','')
+    assert statement == {'AWS': '*'}
+    statement = c3statement.do_principal('blah','root')
+    assert statement == {'AWS': ['arn:aws:iam::blah:root']}
+    statement = c3statement.do_principal('blah','user')
+    assert statement == {'AWS': ['arn:aws:iam::blah:user/user']}
+
+
+def test_jgp_do_condition():
+    ''' Test do_condition in c3.utils.jgp '''
+    cond = c3statement.do_condition('IpAddress,aws:SourceIp,CGM-WestHollywood')
+    assert cond == {'IpAddress': {'aws:SourceIp': '216.1.187.128/27'}}
+    cond = c3statement.do_condition(
+        'StringEquals,s3:x-amz-acl,bucket-owner-full-control')
+    assert cond == {
+        'StringEquals': {'s3:x-amz-acl': 'bucket-owner-full-control'}}
+    cond = c3statement.do_condition('invalid')
+    assert cond == False
+    cond = c3statement.do_condition('1,2,3,4')
+    assert cond == False
