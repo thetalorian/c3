@@ -2,10 +2,12 @@
 
 import os
 import sys
+import random
 import c3.utils.accounts as c3accounts
 import c3.utils.naming as c3naming
 import c3.utils.jgp.gen_entry as c3gen_entry
 import c3.utils.jgp.statement as c3statement
+import c3.utils.graphite
 
 
 def test_get_account_name():
@@ -80,6 +82,13 @@ def test_get_logging_bucket_name():
     assert bucket == False
 
 
+def test_get_cidr():
+    ''' Test get_cidr function in c3.utils.naming '''
+    os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests'
+    cidr = c3naming.get_cidr('**PUBLIC**')
+    assert cidr == '0.0.0.0/0'
+
+
 def test_jgp_read_config():
     ''' Test read_config in c3.utils.jgp '''
     config = 'fake.ini'
@@ -137,8 +146,8 @@ def test_jgp_do_principal():
 
 def test_jgp_do_condition():
     ''' Test do_condition in c3.utils.jgp '''
-    cond = c3statement.do_condition('IpAddress,aws:SourceIp,CGM-WestHollywood')
-    assert cond == {'IpAddress': {'aws:SourceIp': '216.1.187.128/27'}}
+    cond = c3statement.do_condition('IpAddress,aws:SourceIp,**PUBLIC**')
+    assert cond == {'IpAddress': {'aws:SourceIp': '0.0.0.0/0'}}
     cond = c3statement.do_condition(
         'StringEquals,s3:x-amz-acl,bucket-owner-full-control')
     assert cond == {

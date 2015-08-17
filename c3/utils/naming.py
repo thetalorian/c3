@@ -89,11 +89,7 @@ def get_logging_bucket_name(account_id=None):
 
 
 def get_cidr(net):
-    '''
-    Get the CIDR address from a network name
-    >>> getCIDR("DuPont-6")
-    '208.85.8.6/32'
-    '''
+    ''' Get the CIDR address from a network name '''
     names = get_network_data()[1]
     try:
         return names[net]
@@ -105,10 +101,7 @@ def get_network_data():
     ''' Parse the network file for use by other methods '''
     nets = dict()
     names = dict()
-    if not os.getenv('AWS_BASE_DIR'):
-        print >> sys.stderr, 'WARN: AWS_BASE_DIR not set in env'
-        return False
-    net_file = '%s/%s' % (os.getenv('AWS_BASE_DIR'), 'etc/networks.txt')
+    net_file = '%s/%s' % (os.getenv('AWS_CONF_DIR'), '/networks.txt')
     try:
         nfile = open(net_file, 'r')
     except IOError, msg:

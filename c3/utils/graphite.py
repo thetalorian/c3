@@ -63,17 +63,8 @@ class Graphite(object):
         ''' Get FQDN for server metric path. '''
         if self.prefix:
             return self.prefix
-        # figure out the hostname stuff for the metric path
         hostname = socket.getfqdn()
         fqdn = re.sub(r'\.', '_', hostname)
         ct_class = fqdn[7:10]
         self.prefix = "servers.%s.%s" % (ct_class, fqdn)
         return self.prefix
-
-
-if __name__ == "__main__":
-    import random
-    METRIC = "business.operations.test.metric"
-    G = Graphite()
-    G.send_metric(METRIC, random.randint(0, 100))
-    G.send_server_metric(METRIC, random.randint(0, 100))
