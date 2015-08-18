@@ -156,3 +156,58 @@ def test_jgp_do_condition():
     assert cond == False
     cond = c3statement.do_condition('1,2,3,4')
     assert cond == False
+
+
+class TestConfig(object):
+    '''
+    >>> cc.getAMI()[:3]
+    'ami'
+    >>> cc.getAZs()
+    ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
+    >>> cc.getCount()
+    1
+    >>> cc.getSize()
+    't1.micro'
+    >>> cc.setAMI('ami-wil')
+    >>> cc.getAMI()
+    'ami-wil'
+    >>> cc.setSize('m7.huge')
+    >>> cc.getSize()
+    'm7.huge'
+    >>> cc.setCount(7)
+    >>> cc.getCount()
+    7
+    >>> cc.setAZs("us-east-1c,us-east-1b")
+    >>> cc.getAZs()
+    ['us-east-1c', 'us-east-1b']
+    >>> cc.getCountAZs()
+    2
+    >>> cc.setAZs("us-east-1c,us-east-1b,us-east-1b")
+    >>> cc.getCountAZs()
+    2
+    >>> cc.getDC()
+    'aws1'
+    >>> cc.getTagset() # doctest: +ELLIPSIS
+    {'BusinessUnit': 'CityGrid', 'Project': 'CloudTest', 'Component': 'pro ProvisionTestBox', 'Env': 'dev', 'Team': 'Operations'}
+    >>> cc.getLaunchTimeout()
+    180
+    >>> cc.getSleepStep()
+    10
+    >>> cc.getUserDataFile() # doctest: +ELLIPSIS
+    '/.../bin/userdata.pl'
+    >>> cc.getAdditionalSGs()
+    ['ssg-management']
+    >>> cc.add_sg("sg-other")
+    >>> cc.getAdditionalSGs()
+    ['ssg-management', 'sg-other']
+    >>> cc.getNodeGroups()
+    ['default_install', 'pro']
+    >>> cc.getAllocateEIPs()
+    False
+    >>> cc.setAllocateEIPs()
+    True
+    >>> cc.getAllocateEIPs()
+    True
+    >>> cc.getUseEBSOptimized()
+    False
+    '''

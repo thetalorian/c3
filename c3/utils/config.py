@@ -16,8 +16,11 @@
 import os
 import re
 import sys
-from ConfigParser import SafeConfigParser
 import ConfigParser
+import c3.aws.ec2.ebs
+import c3.utils.naming
+import c3.utils.accounts
+from ConfigParser import SafeConfigParser
 
 
 def verbose_msg(message, verbose):
@@ -26,13 +29,23 @@ def verbose_msg(message, verbose):
         print 'DEBUG: %s' % message
 
 
-class InvalidCIDRNameError(Exception):
-    ''' Returns exception for inavlid CIDR names '''
-    def __init__(self, value):
-        self.value = value
+def error_msg(message):
+    ''' Prints message to stderr '''
+    print >> sys.stderr, 'ERROR: %s' % message
 
-    def __str__(self):
-        return self.value
+
+def get_account_from_conf(conf=None):
+    ''' Loads config only so we can get the account for ClusterConfig. '''
+    scp = SafeConfigParser()
+    scp.read(conf)
+    try:
+        return scp.get('cluster', 'aws_account')
+    except ConfigParser.NoSectionError, msg:
+        error_msg(msg)
+        sys.exit(1)
+    except ConfigParser.NoOptionError, msg:
+        error_msg(msg)
+        sys.exit(1)
 
 
 class TooManyAMIsError(Exception):
@@ -81,96 +94,100 @@ class ConfigNotFoundException(Exception):
         return self.value
 
 
-class Config(SafeConfigParser):
-    ''' Lets override some of the initial config loading stuff
-    so we can hit he ground running '''
-    def __init__(self):
-        SafeConfigParser.__init__(self)
-        self.read(os.getenv('AWS_CONF_DIR') + '/aws_automation.cfg')
-
 class EBSConfig(object):
-    """ a class to hold EBS configuration data"""
+    ''' A class to hold EBS configuration data '''
     def __init__(self):
-        self.volumes = []
+        self.volumes = list()
+        self.azs = list()
 
-    def addVolumes(self, type, device, size, iops):
-        self.volumes.append({'type': type, 'device': device, 'size': size, 'iops': iops})
+    def add_volumes(self, vol_type, device, size, iops):
+        ''' Add volume information '''
+        self.volumes.append(
+            {'type': vol_type, 'device': device, 'size': size, 'iops': iops})
 
-    def getVolumes(self):
+    def get_volumes(self):
+        ''' Return volume information '''
         return self.volumes
 
-        self.azs = []
-
-    # EBSConfig.setAZs()
-    def setAZs(self, azs):
+    def set_azs(self, azs):
+        ''' Set AZ for volume '''
         self.azs = azs
 
-    def getAZs(self):
+    def get_azs(self):
+        ''' Get AZ information for volume '''
         return self.azs
 
+
 class ELBConfig(object):
-    """
-    a simple class to hold ELB configuration data
-    """
+    ''' A simple class to hold ELB configuration data '''
     def __init__(self):
         self.enabled = None
         self.protocol = None
         self.public_port = None
         self.private_port = None
         self.vip_number = None
-
         self.hc_access_point = None
         self.hc_interval = None
         self.hc_target = None
         self.hc_healthy_threshold = None
         self.hc_unhealthy_threshold = None
-
-
-        # Run-time; AZs in config can't be trusted as some may be skipped
-        self.azs = []
+        self.azs = list()
 
     def validate(self):
+        ''' Validate required config options are set'''
         if not self.enabled:
             return self.enabled
-        for item in ['protocol', 'public_port', 'private_port', 'hc_access_point', 'hc_interval', 'hc_target', 'hc_healthy_threshold', 'hc_unhealthy_threshold', 'vip_number']:
+        items = [
+            'protocol', 'public_port', 'private_port',
+            'hc_access_point', 'hc_interval', 'hc_target',
+            'hc_healthy_threshold', 'hc_unhealthy_threshold', 'vip_number']
+        for item in items:
             if getattr(self, item) is None:
-                print >> sys.stderr, "WARNING: %s not set, disabling ELB" % item
+                msg = '%s not set, disabling ELB' % item
+                error_msg(msg)
                 self.enabled = False
         return self.enabled
 
-
-    # ELBConfig.setAZs()
-    def setAZs(self, azs):
+    def set_azs(self, azs):
+        ''' Set ELB AZ '''
         self.azs = azs
 
-
-    def getAZs(self):
+    def get_az2(self):
+        ''' Set ELB AZ '''
         return self.azs
 
 
 class SGConfig(object):
+    ''' A class to store SG config objects '''
     def __init__(self):
-        self.cidr_rules = []
-        self.sg_rules = []
+        self.cidr_rules = list()
+        self.sg_rules = list()
 
-    def addCIDR(self, proto, fport, lport, cidr):
-        self.cidr_rules.append({'proto': proto, 'fport': fport, 'lport': lport, 'cidr': cidr})
+    def add_cidr(self, proto, fport, lport, cidr):
+        ''' Add cidr rules '''
+        self.cidr_rules.append(
+            {'proto': proto, 'fport': fport, 'lport': lport, 'cidr': cidr})
 
-    def addSG(self, proto, fport, lport, owner, sg):
-        self.sg_rules.append({'proto': proto, 'fport': fport, 'lport': lport, 'owner': owner, 'sg': sg})
+    def add_sg(self, proto, fport, lport, owner, sgrp):
+        ''' Add SG rules '''
+        self.sg_rules.append(
+            {'proto': proto, 'fport': fport,
+             'lport': lport, 'owner': owner, 'sg': sgrp})
 
-    def getCIDR(self):
+    def get_cidr(self):
+        ''' Get cidr rules '''
         return self.cidr_rules
 
-    def getSG(self):
+    def get_sg(self):
+        ''' Get sg rules '''
         return self.sg_rules
 
 
 class RAIDConfig(object):
-    """ a simple class to hold RAID configuration data """
+    ''' A simple class to hold RAID configuration data '''
     def __init__(self):
         self.enabled = None
-        self.level= None
+        self.level = None
         self.device = None
 
 
@@ -226,112 +243,58 @@ class RDSInstanceConfig(object):
 
 
 class ClusterConfig(object):
-    """ a class to hold and manage cluster configuration data
+    """ A class to hold and manage cluster configuration data
     Config will come from all of the following, in priority order:
     1) The command line, via the Set methods
-    2) The Class config file, named $env$class.*\.ini
+    2) The Class config file, named $env$class.ini
     3) The $AWS_CONF_DIR/cluster_defaults.ini.$AWS_PROFILE_NAME
     4) The $AWS_CONF_DIR/cluster_defaults.ini
     5) The $HOME/.cluster_defaults.ini (for "sshkey" only)
-    >>> cc.getAMI()[:3]
-    'ami'
-    >>> cc.getAZs()
-    ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
-    >>> cc.getCount()
-    1
-    >>> cc.getSize()
-    't1.micro'
-    >>> cc.setAMI('ami-wil')
-    >>> cc.getAMI()
-    'ami-wil'
-    >>> cc.setSize('m7.huge')
-    >>> cc.getSize()
-    'm7.huge'
-    >>> cc.setCount(7)
-    >>> cc.getCount()
-    7
-    >>> cc.setAZs("us-east-1c,us-east-1b")
-    >>> cc.getAZs()
-    ['us-east-1c', 'us-east-1b']
-    >>> cc.getCountAZs()
-    2
-    >>> cc.setAZs("us-east-1c,us-east-1b,us-east-1b")
-    >>> cc.getCountAZs()
-    2
-    >>> cc.getDC()
-    'aws1'
-    >>> cc.getTagset() # doctest: +ELLIPSIS
-    {'BusinessUnit': 'CityGrid', 'Project': 'CloudTest', 'Component': 'pro ProvisionTestBox', 'Env': 'dev', 'Team': 'Operations'}
-    >>> cc.getLaunchTimeout()
-    180
-    >>> cc.getSleepStep()
-    10
-    >>> cc.getUserDataFile() # doctest: +ELLIPSIS
-    '/.../bin/userdata.pl'
-    >>> cc.getAdditionalSGs()
-    ['ssg-management']
-    >>> cc.addSG("sg-other")
-    >>> cc.getAdditionalSGs()
-    ['ssg-management', 'sg-other']
-    >>> cc.getNodeGroups()
-    ['default_install', 'pro']
-    >>> cc.getAllocateEIPs()
-    False
-    >>> cc.setAllocateEIPs()
-    True
-    >>> cc.getAllocateEIPs()
-    True
-    >>> cc.getUseEBSOptimized()
-    False
     """
-    def __init__(self, file=None, account_name=None, overrides={},
+    def __init__(self, ini_file=None, account_name=None, overrides={},
                  verbose=False, no_defaults=False):
         self.no_defaults = no_defaults  # only read self.classfile if True
         self.defaults = os.getenv('AWS_CONF_DIR') + '/cluster_defaults.ini'
         # This should hold only the ssh key
         self.personal_defaults = os.getenv('HOME') + '/.cluster_defaults.ini'
-        self.classfile = file
-        if not os.path.exists(file):
-            raise ConfigNotFoundException("Can't find config: %s" % file);
+        self.classfile = ini_file
+        if not os.path.exists(ini_file):
+            raise ConfigNotFoundException("Can't find config: %s" % ini_file)
         self.verbose = verbose
         self.account_name = account_name
-        # TODO: remove once all programs are moved to zambi
-        if not self.account_name:
-            import cgm.utils.account_utils
-            self.account_name = cgm.utils.account_utils.getAccount()
         self.primary_sg = None
         # These aren't IN the config file, they're implied by the name
         self.server_env = None
         self.server_class = None
-        # this should be looked up from the AZs used
+        # This should be looked up from the AZs used
         self.server_datacenter = None
         self.user_data_raw = None
         self.domain = None
         self.ebs = EBSConfig()
         self.elb = ELBConfig()
-        self.sg = SGConfig()
+        self.sgrp = SGConfig()
         self.raid = RAIDConfig()
         self.rds = RDSInstanceConfig()
         self.rds_sg = RDSSGConfig()
         self.rds_pg = RDSPGConfig()
-        self.overrides = {}
+        self.overrides = dict()
         # Read the in the INI files
         if self.no_defaults:
-            self.readFiles([self.classfile])
+            self.read_files([self.classfile])
         else:
-            self.readFiles(
+            self.read_files(
                 [self.personal_defaults, self.defaults,
-                "%s-%s" % (self.defaults, self.account_name), self.classfile])
-        self.getMetaData()
-        self.server_datacenter = self.getCGRegion()
+                 "%s-%s" % (self.defaults, self.account_name), self.classfile])
+        self.get_meta_data()
+        self.server_datacenter = self.get_cg_region()
         if self.ini.has_section('ebs'):
-            self.readEBSConfig()
+            self.read_ebs_config()
         if self.ini.has_section('elb'):
-            self.readELBConfig()
+            self.read_elb_config()
         if self.ini.has_section('securitygroup'):
-            self.readSGConfig()
+            self.read_sg_config()
         if self.ini.has_section('raid'):
-            self.readRAIDConfig()
+            self.read_raid_config()
         if self.ini.has_section('rds_provision'):
             self.read_rds_config()
         if self.ini.has_section('rds_securitygroup'):
@@ -339,63 +302,63 @@ class ClusterConfig(object):
         if self.ini.has_section('rds_parameters'):
             self.read_rds_pg_config()
 
-    def getMetaData(self):
+    def get_meta_data(self):
+        ''' Get metadata from classfile '''
         self.server_env = os.path.basename(self.classfile)[:3]
         self.server_class = os.path.basename(self.classfile)[3:6]
-        self.primary_sg = "%s%s" % (self.server_env, self.server_class)
+        self.primary_sg = '%s%s' % (self.server_env, self.server_class)
         self.global_ssg = 'ssg-management'
 
-    def getServerEnv(self):
+    def get_server_env(self):
+        ''' Return the server Environment '''
         return self.server_env
 
-    def getPrimarySG(self):
+    def get_primary_sg(self):
+        ''' Return the primary SG '''
         return self.primary_sg
 
-    def getGlobalSSG(self):
+    def get_global_ssg(self):
+        ''' Return the Global SG '''
         return self.global_ssg
 
-    def getAWSRegion(self):
-        # we should only work in one region, so we can just take the first
-        if self.getAZs()[0] == 'auto':
+    # Why do we have two?
+    def get_aws_region(self):
+        ''' We work in only one region, so we can just take the first '''
+        if self.get_azs()[0] == 'auto':
             return 'us-east-1'
         else:
-            return self.getAZs()[0][:-1]
+            return self.get_azs()[0][:-1]
 
-    # FIXME TODO this should use cgm.utils.cgm_naming.getAmazonDatacenter()
-    def getCGRegion(self):
-        # we should only work in one region, so we can just take the first
-        if not self.getAZs():
-            return 'aws1'
-        if self.getAZs()[0] == 'auto':
-            return 'aws1'
-        if self.getAZs()[0][:-1] == 'us-east-1':
-            return 'aws1'
-        if self.getAZs()[0][:-1] == 'us-west-1':
-            return 'aws2'
-        raise InvalidAZError("AZ '%s' is invalid" % self.getAZs()[0])
+    # This is the other one...
+    def get_cg_region(self):
+        ''' Return region from c3.utils.naming.get_aws_dc '''
+        return c3.utils.naming.get_aws_dc(self.region)
 
-    def readFiles(self, files):
-        self.files = []
-        for file in files:
-            if os.path.exists(file):
-                self.files.append(file)
-        if self.verbose:
-            print >> sys.stderr, "Trying %s\n" % files
-            print >> sys.stderr, "Read %s\n" % self.files
+    def read_files(self, ini_files):
+        ''' Read in ini files '''
+        self.ini_files = list()
+        verbose_msg('Trying %s\n' % ini_files, self.verbose)
+        for ini in ini_files:
+            if os.path.exists(ini):
+                self.ini_files.append(ini)
+        verbose_msg('Read %s\n' % self.files, self.verbose)
         self.ini = ConfigParser.ConfigParser(
             {"AWS_CONF_DIR": os.getenv('AWS_CONF_DIR')})
-        self.ini.read(files)
+        self.ini.read(ini_files)
 
-    # get a setting from the INI files
-    def getIni(self, section, name, castf, fallback=None):
-        if self.ini.has_option(section, name):
-            try:
-                return castf(self.ini.get(section, name))
-            except Exception, e:
-                print >> sys.stderr, e
-        return fallback
+    def get_ini(self, section, name, castf):
+        ''' Get a setting from the ini files '''
+        try:
+            return castf(self.ini.get(section, name))
+        except ConfigParser.NoSectionError, msg:
+            error_msg(msg)
+            return None
+        except ConfigParser.NoOptionError, msg:
+            error_msg(msg)
+            return None
 
     def get_hvm_instances(self):
+        ''' HVM instance types that are not compatible with paravirtual AMIs '''
         instances = [
             'cc2.8xlarge',
             'i2.xlarge',
@@ -413,14 +376,16 @@ class ClusterConfig(object):
         ]
         return instances
 
-    def setAMI(self, ami):
+    def set_ami(self, ami):
+        ''' Set AMI '''
         self.overrides['ami'] = ami
 
-    def getAMI(self):
+    def get_ami(self):
+        ''' Return the AMI '''
         if 'ami' in self.overrides:
             return self.overrides['ami']
-        instance_type = self.getSize()
-        raw_ami = self.getIni('cluster', 'ami', str, None)
+        instance_type = self.get_size()
+        raw_ami = self.get_ini('cluster', 'ami', str)
         if raw_ami.count('VTYPE'):
             if instance_type in self.get_hvm_instances():
                 return raw_ami.replace('VTYPE', 'hvm')
@@ -429,207 +394,227 @@ class ClusterConfig(object):
         else:
             return raw_ami
 
-    def getWhitelistURL(self):
+    def get_whitelist_url(self):
+        ''' Return the whitelist URL for puppet whitelisting '''
         if 'whitelisturl' in self.overrides:
             return self.overrides['whitelisturl']
-        return self.getIni("cluster", "whitelisturl", str, None)
+        return self.get_ini("cluster", "whitelisturl", str)
 
-    def getResolvedAMI(self, nvdb, verbose=False):
-        ami = self.getAMI()
+    def get_resolved_ami(self, nvdb):
+        ''' Return resolved AMI '''
+        ami = self.get_ami()
         if ami[:4] == 'ami-':
-            print >> sys.stderr, "WARNING: AMI statically set to %s. Please use nv graffiti values" % ami
+            error_msg(
+                'AMI statically set to %s. Please use nv graffiti values' % ami)
             return ami
-
-        try:
-            amis = nvdb.getAMIs(self.getCGRegion(), ami)
-        except Exception, e:
-            #print >> sys.stderr, "FATAL: could not determine AMI (%s)" % e
-            raise AMINotFoundError("nv query for '%s' failed" % ami)
+        amis = nventory.get_amis(self.get_cg_region(), ami)
         if amis is None:
             raise AMINotFoundError("No AMI matching '%s' found" % ami)
         if len(amis) == 1:
             newami = amis.values()[0]
-            self.setAMI(newami)
-            if verbose:
-                print >> sys.stderr, "INFO: Converted '%s' to '%s'" % (ami, newami)
+            self.set_ami(newami)
+            verbose_msg("Converted '%s' to '%s'" % (ami, newami), self.verbose)
             return newami
         elif len(amis) > 1:
             raise TooManyAMIsError("%s matches too many AMIs" % ami, amis)
 
-    def limitAZs(self, limit):
+    def limit_azs(self, limit):
+        ''' Limit the number of AZs to use '''
         if limit > 0:
-            oldazs = self.getAZs()
+            oldazs = self.get_azs()
             newazs = oldazs[:limit]
-            self.setAZs(','.join(newazs))
+            self.set_azs(','.join(newazs))
             return len(oldazs) - len(newazs)
         else:
-            print >> sys.stderr, "WARNING: trying to limit AZs to %d" % limit
+            error_msg("Trying to limit AZs to %d" % limit)
         return 0
 
-    # set comma-separated list
-    def setAZs(self, azs):
-        for az in azs.split(","):
-            if not self._verifyAZ(az):
-                raise InvalidAZError("AZ '%s' is invalid" % az)
+    def set_azs(self, azs):
+        ''' Set comma sperated list of AZs '''
+        for avz in azs.split(","):
+            if not self._verify_az(avz):
+                raise InvalidAZError("AZ '%s' is invalid" % avz)
         self.overrides['azs'] = azs.split(",")
 
-    def _verifyAZ(self, az):
-        if re.match("^\w\w-\w\wst-\d\w", az):
+    def _verify_az(self, avz):
+        ''' Verify AZ via regex '''
+        if re.match(r"^\w\w-\w\wst-\d\w", avz):
             return True
         return False
 
-    def getAZs(self):
+    def get_azs(self):
+        ''' Return AZ information '''
         if 'azs' in self.overrides:
             return self.overrides['azs']
-        ret = self.getIni("cluster", "zone", str, "")
+        ret = self.get_ini("cluster", "zone", str)
         if ret:
-            for az in ret.split(","):
-                if not self._verifyAZ(az):
-                    raise InvalidAZError("AZ '%s' is invalid" % az)
+            for avz in ret.split(","):
+                if not self._verify_az(avz):
+                    raise InvalidAZError("AZ '%s' is invalid" % avz)
             return map(str.strip, ret.split(","))
-        return []
+        return list()
 
-    # is this safe? It changes the order of the main list as we go; copy better?
-    def getNextAZ(self):
-        # we'll need them in a list to do this, stick in overrides
+    def get_next_az(self):
+        ''' We'll need them in a list to do this, stick in overrides '''
         if 'azs' not in self.overrides:
-            self.overrides['azs'] = self.getAZs()
+            self.overrides['azs'] = self.get_azs()
         try:
-            az = self.overrides['azs'].pop(0)
-            self.overrides['azs'].append(az)
+            avz = self.overrides['azs'].pop(0)
+            self.overrides['azs'].append(avz)
             return az
-        except:
+        except IndexError, msg:
+            error_msg(msg)
             return None
 
-    def getCountAZs(self):
-        """ get the count of unique AZs """
-        return len(set(self.getAZs()))
+    def get_count_azs(self):
+        ''' Get the count of unique AZs '''
+        return len(set(self.get_azs()))
 
-    def setCount(self, count):
+    def set_count(self, count):
+        ''' Set the instance count '''
         self.overrides['count'] = int(count)
 
-    def getCount(self):
+    def get_count(self):
+        ''' Return the instance count '''
         if 'count' in self.overrides:
             return self.overrides['count']
-        return self.getIni("cluster", "instance_count", int, None)
+        return self.get_ini("cluster", "instance_count", int)
 
-    def setSize(self, size):
+    def set_size(self, size):
+        ''' Set the instance size '''
         self.overrides['size'] = size
 
-    def getSize(self):
+    def get_size(self):
+        ''' Return the instance size '''
         if 'size' in self.overrides:
             return self.overrides['size']
-        return self.getIni("cluster", "instance_size", str, None)
+        return self.get_ini("cluster", "instance_size", str)
 
-    def setSSHKey(self, sshkey):
+    def set_ssh_key(self, sshkey):
+        ''' Set the ssh key '''
         self.overrides['sshkey'] = sshkey
 
-    def getSSHKey(self):
+    def get_ssh_key(self):
+        ''' Return the ssh key '''
         if 'sshkey' in self.overrides:
             return self.overrides['sshkey']
-        return self.getIni("ssh", "sshkey", str, None)
+        return self.get_ini("ssh", "sshkey", str)
 
-    def getDC(self):
-        if self.getIni("DEFAULT", "datacenter", str, None) is not None:
-            print >> sys.stderr, "WARNING: the 'datacenter' option is no longer read from the INI file"
-        return self.getCGRegion()
+    def get_dc(self):
+        ''' Get the AWS region '''
+        if self.get_ini("DEFAULT", "datacenter", str) is not None:
+            error_msg(
+                "The 'datacenter' option is no longer read from the INI file")
+        return self.get_cg_region()
 
-    def getUserDataFile(self):
-        return self.getIni("cluster", "user_data_file", str, None)
+    def get_user_data_file(self):
+        ''' Return the userdata file '''
+        return self.get_ini("cluster", "user_data_file", str)
 
-    def getUserData(self, replacements={}):
-        path = self.getUserDataFile()
+    def get_user_data(self, replacements={}):
+        ''' Get userdata and set replacements '''
+        path = self.get_user_data_file()
         if not self.user_data_raw:
             if os.path.exists(path):
                 try:
-                    fp = file(path, "r")
-                    self.user_data_raw = fp.read()
-                    fp.close()
-                except:
-                    print >> sys.stderr, "ERROR: failed to read user data from %s" % path
+                    fpath = file(path, "r")
+                    self.user_data_raw = fpath.read()
+                    fpath.close()
+                except IOError, msg:
+                    error_msg(msg)
                     return None
-        ud = self.user_data_raw
-        for k in replacements.keys():
-            if self.verbose:
-                print (
-                    'DEBUG: replacing %s with %s in %s' %
-                    (k, replacements[k], path))
-            ud = ud.replace(k, replacements[k])
-        return ud
+        udata = self.user_data_raw
+        for key in replacements.keys():
+            verbose_msg(
+                'Replacing %s with %s in %s' %
+                (key, replacements[key], path), self.verbose)
+            udata = udata.replace(key, replacements[key])
+        return udata
 
-    def getTagset(self):
-        self.tagset = {}
-        self.tagset['BusinessUnit'] = self.getIni("tags", "business_unit", str, None)
-        self.tagset['Team'] = self.getIni("tags", "team", str, None)
-        self.tagset['Project'] = self.getIni("tags", "project", str, None)
-        if any(e for e in self.files if e.endswith('meta.ini')):
-            self.tagset['Component'] = self.getIni("tags", "component", str, None)
+    def get_tagset(self):
+        ''' Return the tagset cost tags '''
+        self.tagset = dict()
+        self.tagset['BusinessUnit'] = self.get_ini("tags", "business_unit", str)
+        self.tagset['Team'] = self.get_ini("tags", "team", str)
+        self.tagset['Project'] = self.get_ini("tags", "project", str)
+        if any(ent for ent in self.ini_files if ent.endswith('meta.ini')):
+            self.tagset['Component'] = self.get_ini("tags", "component", str)
         else:
-            c = self.getIni("tags", "component", str, self.server_class)
-            if c[:4] == self.server_class + " ":
-                self.tagset['Component'] = self.getIni("tags", "component", str, self.server_class)
+            comp = self.get_ini("tags", "component", str)
+            if comp[:4] == self.server_class + ' ':
+                self.tagset['Component'] = self.get_ini(
+                    "tags", "component", str)
             else:
-                self.tagset['Component'] = "%s %s" % (self.server_class, self.getIni("tags", "component", str, self.server_class))
-        if self.getIni("tags", "env", str, None):
-            self.tagset['Env'] = self.getIni("tags", "env", str, None)
+                self.tagset['Component'] = "%s %s" % (
+                    self.server_class, self.get_ini("tags", "component", str))
+        if self.get_ini("tags", "env", str):
+            self.tagset['Env'] = self.get_ini("tags", "env", str)
         else:
             self.tagset['Env'] = self.server_env
         return self.tagset
 
-    def getLaunchTimeout(self):
-        return self.getIni("cluster", "launch_timeout", int, None)
+    def get_launch_timeout(self):
+        ''' Return launch timeout '''
+        return self.get_ini("cluster", "launch_timeout", int)
 
-    def getSleepStep(self):
-        return self.getIni("cluster", "sleep_step", int, None)
+    def get_sleep_step(self):
+        ''' Return sleep step '''
+        return self.get_ini("cluster", "sleep_step", int)
 
-    def addSG(self, sg):
+    def add_sg(self, sgp):
+        ''' Adding additional SGs '''
         if 'other_sgs' not in self.overrides:
-            self.overrides['other_sgs'] = self.getAdditionalSGs()
-        self.overrides['other_sgs'].append(sg)
+            self.overrides['other_sgs'] = self.get_additional_sgs()
+        self.overrides['other_sgs'].append(sgp)
 
-    def getAdditionalSGs(self):
+    def get_additional_sgs(self):
+        ''' Returns additonal SGs'''
         if 'other_sgs' in self.overrides:
             return self.overrides['other_sgs']
-        ret = self.getIni("cluster", "additional_sgs", str, None)
+        ret = self.get_ini("cluster", "additional_sgs", str)
         if ret:
             return map(str.strip, ret.split(","))
-        return []
+        return list()
 
-    # get the Primary SG and the Additional SGs
-    def getSGs(self):
-        ret = self.getAdditionalSGs()
+    def get_sgs(self):
+        ''' Return all SGs '''
+        ret = self.get_additional_sgs()
         ret.append("%s%s" % (self.server_env, self.server_class))
         return ret
 
-    def getNodeGroups(self):
+    def get_node_groups(self):
+        ''' Return Node groups '''
         if 'node_groups' in self.overrides:
             return self.overrides['node_groups']
-        ret = self.getIni("cluster", "node_groups", str, None)
+        ret = self.get_ini("cluster", "node_groups", str, None)
         if ret:
             return map(str.strip, ret.split(","))
-        return []
+        return list()
 
-    def setAllocateEIPs(self):
+    def set_allocate_eips(self):
+        ''' Set allocated EIPs '''
         self.overrides['allocate_eips'] = True
         return True
 
-    def getAllocateEIPs(self):
+    def get_allocate_eips(self):
+        ''' Return allocated EIPs '''
         if 'allocate_eips' in self.overrides:
             return self.overrides['allocate_eips']
-        if self.getIni("cluster", "allocate_eip", str, None) == "True":
+        if self.get_ini("cluster", "allocate_eip", str) == "True":
             self.allocate_eips = True
         else:
             self.allocate_eips = False
         return self.allocate_eips
 
-    def setUseEBSOptimized(self):
+    def set_use_ebs_optimized(self):
+        ''' Set use EBS optimized '''
         self.overrides['use_ebs_optimized'] = True
-        return True
 
-    def getUseEBSOptimized(self):
+    def get_use_ebs_optimized(self):
+        ''' Get EBS optimized option '''
         if 'use_ebs_optimized' in self.overrides:
             return self.overrides['use_ebs_optimized']
-        if self.getIni("cluster", "use_ebs_optimized", str, None) == "True":
+        if self.get_ini("cluster", "use_ebs_optimized", str):
             self.use_ebs_optimized = True
         else:
             self.use_ebs_optimized = False
@@ -641,129 +626,127 @@ class ClusterConfig(object):
 
     def get_domain(self):
         ''' Returns domain '''
-        return self.getIni('cluster', 'domain', str, None)
+        return self.get_ini('cluster', 'domain', str)
 
     def get_fs_type(self):
         ''' Get the filesystem type '''
-        return self.getIni('cluster', 'fs_type', str, None)
+        return self.get_ini('cluster', 'fs_type', str)
 
-    def readEBSConfig(self):
-        if not self.ini.has_section("ebs"):
-            return False
-        import cgm.aws.ec2.ebs
-        for v in self.ini.items("ebs"):
-            if len(v[1].split()) == 3:
-                self.device = v[0]
-                (self.type, self.size, self.iops) = v[1].split(" ")
-                self.ebs.addVolumes(self.type, "/dev/" + self.device, self.size, self.iops)
-            elif len(v[1].split()) == 2:
-                self.device = v[0]
-                (self.type, self.size) = v[1].split(" ")
-                self.ebs.addVolumes(self.type, "/dev/" + self.device, self.size, None)
-        return True
+    def read_ebs_config(self):
+        ''' Read EBS config options '''
+        for vol in self.ini.items("ebs"):
+            if len(vol[1].split()) == 3:
+                self.device = vol[0]
+                (self.vol_type, self.size, self.iops) = vol[1].split(" ")
+                self.ebs.add_volumes(
+                    self.vol_type, "/dev/" + self.device, self.size, self.iops)
+            elif len(vol[1].split()) == 2:
+                self.device = vol[0]
+                (self.vol_type, self.size) = vol[1].split(" ")
+                self.ebs.add_volumes(
+                    self.vol_type, "/dev/" + self.device, self.size, None)
 
-    def getEBSConfig(self):
-        return self.ebs.getVolumes()
+    def get_ebs_config(self):
+        ''' Return EBS config options '''
+        return self.ebs.get_volumes()
 
-    def readELBConfig(self):
-        if self.getIni("elb", "enabled", str, None) == "True":
+    def read_elb_config(self):
+        ''' Read in ELB config options '''
+        if self.get_ini("elb", "enabled", str) == "True":
             self.elb.enabled = True
         else:
             self.elb.enabled = False
             return False
-
-        self.elb.protocol = self.getIni("elb", "protocol", str, None)
-        self.elb.public_port = self.getIni("elb", "public_port", int, None)
-        self.elb.private_port = self.getIni("elb", "private_port", int, None)
-
-        self.elb.vip_number = self.getIni("elb", "vip_number", int, None) or 1
-
-        self.elb.hc_access_point = self.getIni("healthcheck", "hc_access_point", str, None)
-        self.elb.hc_interval = self.getIni("healthcheck", "hc_interval", int, None)
-        self.elb.hc_target = self.getIni("healthcheck", "hc_target", str, None)
-        self.elb.hc_healthy_threshold = self.getIni("healthcheck", "hc_healthy_threshold", int, None)
-        self.elb.hc_unhealthy_threshold = self.getIni("healthcheck", "hc_unhealthy_threshold", int, None)
-
+        self.elb.protocol = self.get_ini("elb", "protocol", str)
+        self.elb.public_port = self.get_ini("elb", "public_port", int)
+        self.elb.private_port = self.get_ini("elb", "private_port", int)
+        self.elb.vip_number = self.get_ini("elb", "vip_number", int) or 1
+        self.elb.hc_access_point = self.get_ini(
+            "healthcheck", "hc_access_point", str)
+        self.elb.hc_interval = self.get_ini("healthcheck", "hc_interval", int)
+        self.elb.hc_target = self.get_ini("healthcheck", "hc_target", str)
+        self.elb.hc_healthy_threshold = self.get_ini(
+            "healthcheck", "hc_healthy_threshold", int)
+        self.elb.hc_unhealthy_threshold = self.get_ini(
+            "healthcheck", "hc_unhealthy_threshold", int)
         self.elb.validate()
 
-    # we said only use the getters, so here it is for ELB
-    def getELBConfig(self):
+    def get_elb_config(self):
+        ''' Return ELB config '''
         return self.elb
 
-    def getELBName(self):
-        """
-        Return the name of the ELB, based on cluster and ELB configs
-        >>> cc.readELBConfig()
-        >>> cc.getELBName()
+    def get_elb_name(self):
+        ''' Return the name of the ELB, based on cluster and ELB configs
+        >>> cc.read_elb_config()
+        >>> cc.get_elb_name()
         'aws1dvippro1'
-        """
-        return "%s%svip%s%d" % (self.getCGRegion(), self.server_env[:1], self.server_class, self.elb.vip_number)
+        '''
+        return "%s%svip%s%d" % (
+            self.get_cg_region(), self.server_env[:1],
+            self.server_class, self.elb.vip_number)
 
-    def readSGConfig(self):
-        import cgm.utils.cgm_naming
-        import cgm.utils.account_utils
-        for c in self.ini.items("securitygroup"):
-            if c[1][:7] == "ingress":
-                (type, proto, ports, remote) = c[1].split(" ")
+    def read_sg_config(self):
+        ''' Reads in SG config options '''
+        for item in self.ini.items("securitygroup"):
+            if item[1][:7] == "ingress":
+                (type, proto, ports, remote) = item[1].split(" ")
                 if ports == "None":
-                    (p1, p2) = [-1, -1]
+                    (prt1, prt2) = [-1, -1]
+                elif '-' in ports:
+                    (prt1, prt2) = ports.split("-")
                 else:
-                    try:
-                        (p1, p2) = ports.split("-")
-                    except:
-                        p1 = p2 = ports
-                p1 = int(p1)
-                p2 = int(p2)
+                    prt1 = prt2 = ports
+                prt1 = int(prt1)
+                prt2 = int(prt2)
                 if remote[:5] == 'CIDR:':
-                    self.sg.addCIDR(proto, p1, p2, remote[5:])
+                    self.sgrp.add_cidr(proto, prt1, prt2, remote[5:])
                 elif remote[:4] == 'Net:':
-                    cidr = cgm.utils.cgm_naming.getCIDR(remote[4:])
+                    cidr = c3.utils.naming.get_cidr(remote[4:])
                     if not cidr:
-                        raise InvalidCIDRNameError("Network '%s' is invalid" % remote[4:])
-                    self.sg.addCIDR(proto, p1, p2, cidr)
+                        raise InvalidCIDRNameError(
+                            "Network '%s' is invalid" % remote[4:])
+                    self.sgrp.add_cidr(proto, prt1, prt2, cidr)
                 elif remote[:3] == 'SG:':
                     acct, sg = remote[3:].split("/")
                     if acct != 'self':
-                        acctid = cgm.utils.account_utils.getAccountID(acct)
-                        if self.verbose:
-                            print "INFO: %s == %s" % (acct, acctid)
+                        acctid = c3.utils.accounts.getAccountID(acct)
+                        verbose_msg('%s == %s' % (acct, acctid), self.verbose)
                     else:
-                        acctid = cgm.utils.account_utils.getAccountID(
+                        acctid = c3.utils.accounts.getAccountID(
                             self.get_aws_account())
                     if acctid:
-                        self.sg.addSG(proto, p1, p2, acctid, sg)
+                        self.sgrp.add_sg(proto, prt1, prt2, acctid, sg)
                     else:
-                        print "WARN: Can't find my own account."
-                if self.verbose:
-                    print >> sys.stderr, "INFO: Opening %s for ports %d to %d from %s" % (proto, p1, p2, remote)
+                        error_msg("Can't find my own account.")
+                verbose_msg(
+                    "INFO: Opening %s for ports %d to %d from %s" %
+                    (proto, prt1, prt2, remote), self.verbose)
 
-    def getSGRules(self):
-        return self.sg.getSG()
+    def get_sg_rules(self):
+        ''' Return SG rules '''
+        return self.sgrp.get_sg()
 
-    def getCIDRRules(self):
-        return self.sg.getCIDR()
+    def get_cidr_rules(self):
+        ''' Return CIDR rules '''
+        return self.sgrp.get_cidr()
 
-    def readRAIDConfig(self):
-        if not self.ini.has_section("raid"):
-            self.raid.enabled = False
-            return False
-        if self.getIni("raid", "enabled", str, None) == "True":
+    def read_raid_config(self):
+        ''' Read in RAID config options '''
+        if self.get_ini("raid", "enabled", str) == "True":
             self.raid.enabled = True
         else:
             self.raid.enabled = False
             return False
-        self.raid.level= self.getIni("raid", "level", str, None)
-        self.raid.device = self.getIni("raid", "device", str, None)
+        self.raid.level = self.get_ini("raid", "level", str)
+        self.raid.device = self.get_ini("raid", "device", str)
 
     def read_rds_sg_config(self):
         ''' Reads RDS SG authorizations from ini files. '''
-        import cgm.utils.cgm_naming
-        import cgm.utils.account_utils
         for rule in self.ini.items('rds_securitygroup'):
             if re.match('.*rule', rule[0]):
                 (rtype, rvalue) = rule[1].split(':')
                 if rtype == 'Net':
-                    cidr = cgm.utils.cgm_naming.getCIDR(rvalue)
+                    cidr = c3.utils.naming.get_cidr(rvalue)
                     if cidr:
                         verbose_msg('Appending RDS CIDR rule %s' % cidr,
                                     self.verbose)
@@ -775,9 +758,9 @@ class ClusterConfig(object):
                 elif rtype == 'SG':
                     (oid, sid) = rvalue.split('/')
                     if oid != 'self':
-                        acctid = cgm.utils.account_utils.getAccountID(oid)
+                        acctid = c3.utils.accounts.getAccountID(oid)
                     else:
-                        acctid = cgm.utils.account_utils.getAccountID(
+                        acctid = c3.utils.accounts.getAccountID(
                             self.get_aws_account())
                     if acctid:
                         verbose_msg(
@@ -818,25 +801,8 @@ class ClusterConfig(object):
         ''' Returns dictonary of RDS config items. '''
         return self.rds.get_config()
 
-    # Not used yet
-    def getPreferredAZs(self):
-        print >> sys.stderr, "preferred AZs are not yet implemented"
-        ret = self.getIni("cluster", "preferred_zone", str, "")
-        if ret:
-            return map(str.strip, ret.split(","))
-        return []
-
-
-def get_account_from_conf(conf=None):
-    ''' Loads config only so we can get the account for ClusterConfig. '''
-    scp = SafeConfigParser()
-    if not os.path.exists(conf):
-        raise ConfigNotFoundException("Can't find config: %s" % conf);
-    scp.read(conf)
-    return scp.get('cluster', 'aws_account')
-
 
 if __name__ == '__main__':
     import doctest
-    test_ini = os.getenv('AWS_CONF_DIR') + '/devpro.ini'
-    doctest.testmod(extraglobs={'cc': ClusterConfig(test_ini, 'opsqa', True)})
+    TEST_INI = os.getenv('AWS_CONF_DIR') + '/devpro.ini'
+    doctest.testmod(extraglobs={'cc': ClusterConfig(TEST_INI, 'opsqa', True)})
