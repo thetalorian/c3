@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-''' Organize options from config files'''
+''' Organize options from config files '''
 import os
 import re
 import sys
@@ -48,11 +48,38 @@ def get_account_from_conf(conf=None):
         sys.exit(1)
 
 
+def get_hvm_instances():
+    ''' HVM instance types that are not compatible with paravirtual AMIs '''
+    instances = [
+        'cc2.8xlarge',
+        'i2.xlarge',
+        'i2.2xlarge',
+        'i2.4xlarge',
+        'i2.8xlarge',
+        'r3.large',
+        'r3.xlarge',
+        'r3.2xlarge',
+        'r3.4xlarge',
+        'r3.8xlarge',
+        't2.micro',
+        't2.small',
+        't2.medium',
+    ]
+    return instances
+
+
+def verify_az(avz):
+    ''' Verify AZ via regex '''
+    if re.match(r"^\w\w-\w\wst-\d\w", avz):
+        return True
+    return False
+
+
 class TooManyAMIsError(Exception):
     ''' Returns too many AMI exception '''
-    def __init__(self, value, amis):
+    def __init__(self, value):
+        super(TooManyAMIsError, self).__init__(value)
         self.value = value
-        self.amis = amis
 
     def __str__(self):
         return repr(self.value)
@@ -61,6 +88,7 @@ class TooManyAMIsError(Exception):
 class AMINotFoundError(Exception):
     ''' Return AMI not found exception '''
     def __init__(self, value):
+        super(AMINotFoundError, self).__init__(value)
         self.value = value
 
     def __str__(self):
@@ -70,6 +98,7 @@ class AMINotFoundError(Exception):
 class InvalidAZError(Exception):
     ''' Returns invalid AZ exception'''
     def __init__(self, value):
+        super(InvalidAZError, self).__init__(value)
         self.value = value
 
     def __str__(self):
@@ -79,6 +108,7 @@ class InvalidAZError(Exception):
 class InvalidCIDRNameError(Exception):
     ''' Return invalid cidr name exception '''
     def __init__(self, value):
+        super(InvalidCIDRNameError, self).__init__(value)
         self.value = value
 
     def __str__(self):
@@ -88,6 +118,7 @@ class InvalidCIDRNameError(Exception):
 class ConfigNotFoundException(Exception):
     ''' Return config not found exception '''
     def __init__(self, value):
+        super(ConfigNotFoundException, self).__init__(value)
         self.value = value
 
     def __str__(self):
@@ -120,6 +151,8 @@ class EBSConfig(object):
 
 class ELBConfig(object):
     ''' A simple class to hold ELB configuration data '''
+    # pylint: disable=too-many-instance-attributes
+    # Appropriate number of attributes for an ELB
     def __init__(self):
         self.enabled = None
         self.protocol = None
@@ -152,7 +185,7 @@ class ELBConfig(object):
         ''' Set ELB AZ '''
         self.azs = azs
 
-    def get_az2(self):
+    def get_azs(self):
         ''' Set ELB AZ '''
         return self.azs
 
@@ -170,6 +203,8 @@ class SGConfig(object):
 
     def add_sg(self, proto, fport, lport, owner, sgrp):
         ''' Add SG rules '''
+        # pylint: disable=too-many-arguments
+        # Appropriate number arguments of for add_sg
         self.sg_rules.append(
             {'proto': proto, 'fport': fport,
              'lport': lport, 'owner': owner, 'sg': sgrp})
@@ -189,6 +224,22 @@ class RAIDConfig(object):
         self.enabled = None
         self.level = None
         self.device = None
+
+    def set_level(self, level):
+        ''' Set the RAID level '''
+        self.level = level
+
+    def set_device(self, device):
+        ''' Set the RAID device '''
+        self.device = device
+
+    def get_level(self):
+        ''' Returns RAID level '''
+        return self.level
+
+    def get_device(self):
+        ''' Returns RAID device '''
+        return self.device
 
 
 class RDSSGConfig(object):
@@ -251,7 +302,9 @@ class ClusterConfig(object):
     4) The $AWS_CONF_DIR/cluster_defaults.ini
     5) The $HOME/.cluster_defaults.ini (for "sshkey" only)
     """
-    def __init__(self, ini_file=None, account_name=None, overrides={},
+    # pylint: disable=too-many-instance-attributes
+    # Appropriate number of attributes for ClusterConfig
+    def __init__(self, ini_file=None, account_name=None,
                  verbose=False, no_defaults=False):
         self.no_defaults = no_defaults  # only read self.classfile if True
         self.defaults = os.getenv('AWS_CONF_DIR') + '/cluster_defaults.ini'
@@ -262,6 +315,7 @@ class ClusterConfig(object):
             raise ConfigNotFoundException("Can't find config: %s" % ini_file)
         self.verbose = verbose
         self.account_name = account_name
+        self.global_ssg = None
         self.primary_sg = None
         # These aren't IN the config file, they're implied by the name
         self.server_env = None
@@ -277,7 +331,10 @@ class ClusterConfig(object):
         self.rds = RDSInstanceConfig()
         self.rds_sg = RDSSGConfig()
         self.rds_pg = RDSPGConfig()
+        self.tagset = dict()
         self.overrides = dict()
+        self.ini_files = list()
+        self.ini = None
         # Read the in the INI files
         if self.no_defaults:
             self.read_files([self.classfile])
@@ -332,19 +389,18 @@ class ClusterConfig(object):
     # This is the other one...
     def get_cg_region(self):
         ''' Return region from c3.utils.naming.get_aws_dc '''
-        return c3.utils.naming.get_aws_dc(self.region)
+        return c3.utils.naming.get_aws_dc(self.get_aws_region())
 
-    def read_files(self, ini_files):
+    def read_files(self, conf_files):
         ''' Read in ini files '''
-        self.ini_files = list()
-        verbose_msg('Trying %s\n' % ini_files, self.verbose)
-        for ini in ini_files:
+        verbose_msg('Trying %s\n' % conf_files, self.verbose)
+        for ini in conf_files:
             if os.path.exists(ini):
                 self.ini_files.append(ini)
-        verbose_msg('Read %s\n' % self.files, self.verbose)
+        verbose_msg('Read %s\n' % self.ini_files, self.verbose)
         self.ini = ConfigParser.ConfigParser(
             {"AWS_CONF_DIR": os.getenv('AWS_CONF_DIR')})
-        self.ini.read(ini_files)
+        self.ini.read(self.ini_files)
 
     def get_ini(self, section, name, castf):
         ''' Get a setting from the ini files '''
@@ -357,25 +413,6 @@ class ClusterConfig(object):
             error_msg(msg)
             return None
 
-    def get_hvm_instances(self):
-        ''' HVM instance types that are not compatible with paravirtual AMIs '''
-        instances = [
-            'cc2.8xlarge',
-            'i2.xlarge',
-            'i2.2xlarge',
-            'i2.4xlarge',
-            'i2.8xlarge',
-            'r3.large',
-            'r3.xlarge',
-            'r3.2xlarge',
-            'r3.4xlarge',
-            'r3.8xlarge',
-            't2.micro',
-            't2.small',
-            't2.medium',
-        ]
-        return instances
-
     def set_ami(self, ami):
         ''' Set AMI '''
         self.overrides['ami'] = ami
@@ -387,7 +424,7 @@ class ClusterConfig(object):
         instance_type = self.get_size()
         raw_ami = self.get_ini('cluster', 'ami', str)
         if raw_ami.count('VTYPE'):
-            if instance_type in self.get_hvm_instances():
+            if instance_type in get_hvm_instances():
                 return raw_ami.replace('VTYPE', 'hvm')
             else:
                 return raw_ami.replace('VTYPE', 'paravirtual')
@@ -400,7 +437,7 @@ class ClusterConfig(object):
             return self.overrides['whitelisturl']
         return self.get_ini("cluster", "whitelisturl", str)
 
-    def get_resolved_ami(self, nvdb):
+    def get_resolved_ami(self, nventory):
         ''' Return resolved AMI '''
         ami = self.get_ami()
         if ami[:4] == 'ami-':
@@ -416,7 +453,7 @@ class ClusterConfig(object):
             verbose_msg("Converted '%s' to '%s'" % (ami, newami), self.verbose)
             return newami
         elif len(amis) > 1:
-            raise TooManyAMIsError("%s matches too many AMIs" % ami, amis)
+            raise TooManyAMIsError("%s matches too many AMIs: %s" % (ami, amis))
 
     def limit_azs(self, limit):
         ''' Limit the number of AZs to use '''
@@ -432,27 +469,22 @@ class ClusterConfig(object):
     def set_azs(self, azs):
         ''' Set comma sperated list of AZs '''
         for avz in azs.split(","):
-            if not self._verify_az(avz):
+            if not verify_az(avz):
                 raise InvalidAZError("AZ '%s' is invalid" % avz)
         self.overrides['azs'] = azs.split(",")
 
-    def _verify_az(self, avz):
-        ''' Verify AZ via regex '''
-        if re.match(r"^\w\w-\w\wst-\d\w", avz):
-            return True
-        return False
-
     def get_azs(self):
         ''' Return AZ information '''
+        zones = list()
         if 'azs' in self.overrides:
             return self.overrides['azs']
         ret = self.get_ini("cluster", "zone", str)
         if ret:
             for avz in ret.split(","):
-                if not self._verify_az(avz):
+                if not verify_az(avz):
                     raise InvalidAZError("AZ '%s' is invalid" % avz)
-            return map(str.strip, ret.split(","))
-        return list()
+                zones.append(avz.strip())
+        return zones
 
     def get_next_az(self):
         ''' We'll need them in a list to do this, stick in overrides '''
@@ -461,7 +493,7 @@ class ClusterConfig(object):
         try:
             avz = self.overrides['azs'].pop(0)
             self.overrides['azs'].append(avz)
-            return az
+            return avz
         except IndexError, msg:
             error_msg(msg)
             return None
@@ -511,29 +543,28 @@ class ClusterConfig(object):
         ''' Return the userdata file '''
         return self.get_ini("cluster", "user_data_file", str)
 
-    def get_user_data(self, replacements={}):
+    def get_user_data(self, replacements=None):
         ''' Get userdata and set replacements '''
-        path = self.get_user_data_file()
+        ufile = self.get_user_data_file()
         if not self.user_data_raw:
-            if os.path.exists(path):
+            if os.path.exists(ufile):
                 try:
-                    fpath = file(path, "r")
-                    self.user_data_raw = fpath.read()
-                    fpath.close()
+                    udfile = open(ufile, "r")
                 except IOError, msg:
                     error_msg(msg)
                     return None
+                self.user_data_raw = udfile.read()
+                udfile.close()
         udata = self.user_data_raw
         for key in replacements.keys():
             verbose_msg(
                 'Replacing %s with %s in %s' %
-                (key, replacements[key], path), self.verbose)
+                (key, replacements[key], ufile), self.verbose)
             udata = udata.replace(key, replacements[key])
         return udata
 
     def get_tagset(self):
         ''' Return the tagset cost tags '''
-        self.tagset = dict()
         self.tagset['BusinessUnit'] = self.get_ini("tags", "business_unit", str)
         self.tagset['Team'] = self.get_ini("tags", "team", str)
         self.tagset['Project'] = self.get_ini("tags", "project", str)
@@ -569,12 +600,14 @@ class ClusterConfig(object):
 
     def get_additional_sgs(self):
         ''' Returns additonal SGs'''
+        other_sgs = list()
         if 'other_sgs' in self.overrides:
             return self.overrides['other_sgs']
         ret = self.get_ini("cluster", "additional_sgs", str)
         if ret:
-            return map(str.strip, ret.split(","))
-        return list()
+            for sgr in ret.split(','):
+                other_sgs.append(sgr.strip())
+        return other_sgs
 
     def get_sgs(self):
         ''' Return all SGs '''
@@ -584,12 +617,14 @@ class ClusterConfig(object):
 
     def get_node_groups(self):
         ''' Return Node groups '''
+        node_groups = list()
         if 'node_groups' in self.overrides:
             return self.overrides['node_groups']
-        ret = self.get_ini("cluster", "node_groups", str, None)
+        ret = self.get_ini("cluster", "node_groups", str)
         if ret:
-            return map(str.strip, ret.split(","))
-        return list()
+            for ngrp in ret.split(','):
+                node_groups.append(ngrp.strip())
+        return node_groups
 
     def set_allocate_eips(self):
         ''' Set allocated EIPs '''
@@ -601,10 +636,10 @@ class ClusterConfig(object):
         if 'allocate_eips' in self.overrides:
             return self.overrides['allocate_eips']
         if self.get_ini("cluster", "allocate_eip", str) == "True":
-            self.allocate_eips = True
+            allocate_eips = True
         else:
-            self.allocate_eips = False
-        return self.allocate_eips
+            allocate_eips = False
+        return allocate_eips
 
     def set_use_ebs_optimized(self):
         ''' Set use EBS optimized '''
@@ -615,10 +650,10 @@ class ClusterConfig(object):
         if 'use_ebs_optimized' in self.overrides:
             return self.overrides['use_ebs_optimized']
         if self.get_ini("cluster", "use_ebs_optimized", str):
-            self.use_ebs_optimized = True
+            use_ebs_optimized = True
         else:
-            self.use_ebs_optimized = False
-        return self.use_ebs_optimized
+            use_ebs_optimized = False
+        return use_ebs_optimized
 
     def get_aws_account(self):
         ''' Returns AWS account name. '''
@@ -636,15 +671,15 @@ class ClusterConfig(object):
         ''' Read EBS config options '''
         for vol in self.ini.items("ebs"):
             if len(vol[1].split()) == 3:
-                self.device = vol[0]
-                (self.vol_type, self.size, self.iops) = vol[1].split(" ")
+                device = vol[0]
+                (vol_type, size, iops) = vol[1].split(" ")
                 self.ebs.add_volumes(
-                    self.vol_type, "/dev/" + self.device, self.size, self.iops)
+                    vol_type, "/dev/" + device, size, iops)
             elif len(vol[1].split()) == 2:
-                self.device = vol[0]
-                (self.vol_type, self.size) = vol[1].split(" ")
+                device = vol[0]
+                (vol_type, size) = vol[1].split(" ")
                 self.ebs.add_volumes(
-                    self.vol_type, "/dev/" + self.device, self.size, None)
+                    vol_type, "/dev/" + device, size, None)
 
     def get_ebs_config(self):
         ''' Return EBS config options '''
@@ -689,7 +724,7 @@ class ClusterConfig(object):
         ''' Reads in SG config options '''
         for item in self.ini.items("securitygroup"):
             if item[1][:7] == "ingress":
-                (type, proto, ports, remote) = item[1].split(" ")
+                (rtype, proto, ports, remote) = item[1].split(" ")
                 if ports == "None":
                     (prt1, prt2) = [-1, -1]
                 elif '-' in ports:
@@ -707,20 +742,20 @@ class ClusterConfig(object):
                             "Network '%s' is invalid" % remote[4:])
                     self.sgrp.add_cidr(proto, prt1, prt2, cidr)
                 elif remote[:3] == 'SG:':
-                    acct, sg = remote[3:].split("/")
+                    acct, sgrp = remote[3:].split("/")
                     if acct != 'self':
-                        acctid = c3.utils.accounts.getAccountID(acct)
+                        acctid = c3.utils.accounts.get_account_id(acct)
                         verbose_msg('%s == %s' % (acct, acctid), self.verbose)
                     else:
-                        acctid = c3.utils.accounts.getAccountID(
+                        acctid = c3.utils.accounts.get_account_id(
                             self.get_aws_account())
                     if acctid:
-                        self.sgrp.add_sg(proto, prt1, prt2, acctid, sg)
+                        self.sgrp.add_sg(proto, prt1, prt2, acctid, sgrp)
                     else:
                         error_msg("Can't find my own account.")
                 verbose_msg(
-                    "INFO: Opening %s for ports %d to %d from %s" %
-                    (proto, prt1, prt2, remote), self.verbose)
+                    "INFO: Allowing %s %s for ports %d to %d from %s" %
+                    (rtype, proto, prt1, prt2, remote), self.verbose)
 
     def get_sg_rules(self):
         ''' Return SG rules '''
@@ -737,8 +772,8 @@ class ClusterConfig(object):
         else:
             self.raid.enabled = False
             return False
-        self.raid.level = self.get_ini("raid", "level", str)
-        self.raid.device = self.get_ini("raid", "device", str)
+        self.raid.set_level(self.get_ini("raid", "level", str))
+        self.raid.set_device(self.get_ini("raid", "device", str))
 
     def read_rds_sg_config(self):
         ''' Reads RDS SG authorizations from ini files. '''
@@ -758,9 +793,9 @@ class ClusterConfig(object):
                 elif rtype == 'SG':
                     (oid, sid) = rvalue.split('/')
                     if oid != 'self':
-                        acctid = c3.utils.accounts.getAccountID(oid)
+                        acctid = c3.utils.accounts.get_account_id(oid)
                     else:
-                        acctid = c3.utils.accounts.getAccountID(
+                        acctid = c3.utils.accounts.get_account_id(
                             self.get_aws_account())
                     if acctid:
                         verbose_msg(
