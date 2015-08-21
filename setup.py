@@ -23,6 +23,9 @@ setup(name='C3',
         "Programming Language :: Python :: 2.7",
         "Intended Audience :: System Administrators ",
         ],
+      scripts=[
+        'scripts/C3EC2Provision.py'
+        ],
       author='Jesse Escobedo',
       author_email='jesse.escobedo@citygridmedia.com',
       url='',
