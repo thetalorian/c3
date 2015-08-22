@@ -17,6 +17,7 @@
 import re
 import socket
 import time
+from c3.utils import logging
 
 
 class Graphite(object):
@@ -32,16 +33,16 @@ class Graphite(object):
         ''' Send custom path metric to graphite. '''
         message = "%s %s %s"  % (name, value, int(time.time()))
         if debug:
-            print message
+            logging.info(message)
             return True
         if not self._sock:
             self.connect()
         if self._sock_status:
-            print "INFO: Sending %s %s to %s" % (name, value, self.server)
+            logging.info("Sending %s %s to %s" % (name, value, self.server))
             try:
                 self._sock.sendall(message + "\n")
             except socket.gaierror, msg:
-                print 'ERROR: %s' % msg
+                logging.error(msg)
                 self._sock = None
                 return False
 
@@ -57,7 +58,7 @@ class Graphite(object):
             self._sock_status = True
         except (socket.gaierror, socket.timeout, socket.error), msg:
             self._sock_status = False
-            print 'ERROR: %s' % msg
+            logging.error(msg)
 
     def get_server_prefix(self):
         ''' Get FQDN for server metric path. '''

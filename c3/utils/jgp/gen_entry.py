@@ -17,6 +17,7 @@ to generates statement policies'''
 import re
 import sys
 import ConfigParser
+from c3.utils import logging
 
 
 def read_config(config):
@@ -38,7 +39,7 @@ def gen_s3_entry(ini, user, user_account):
             try:
                 effect = ini.get(action, 'effect')
             except ConfigParser.NoOptionError, msg:
-                print >> sys.stderr, 'WARN: %s' % msg
+                logging.warn(msg)
             if ini.has_option(action, 'condition'):
                 condition = ini.get(action, 'condition')
             else:

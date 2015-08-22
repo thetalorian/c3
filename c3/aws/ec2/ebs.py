@@ -30,7 +30,7 @@ class InvalidAZException(Exception):
                     self.zone)
 
 
-class CGEBS(object):
+class C3EBS(object):
     """ This class is used to manage EBS """
     def __init__(self, conn):
         self.conn = conn
@@ -93,8 +93,8 @@ class CGEBS(object):
         logging.info('Creating Snapshot from %s' % vol_id)
         try:
             snap = self.conn.create_snapshot(vol_id, description=desc)
-        except EC2ResponseError, response:
-            logging.error(response.message)
+        except EC2ResponseError, msg:
+            logging.error(msg.message)
             return None
         while snap.status == 'pending':
             logging.info('Current Status: %s' % snap.status)
@@ -108,8 +108,8 @@ class CGEBS(object):
         logging.info('Deleting snapshot: %s' % snap_id)
         try:
             result = self.conn.delete_snapshot(snap_id)
-        except EC2ResponseError, response:
-            logging.error(response.message)
+        except EC2ResponseError, msg:
+            logging.error(msg.message)
             return None
         if result:
             logging.info('Delete snapshot complete: %s' % snap_id)
@@ -122,5 +122,5 @@ if __name__ == '__main__':
     import boto.ec2.connection
     doctest.testmod(
         extraglobs={
-            'cg': CGEBS(boto.ec2.connect_to_region('us-east-1'))
+            'cg': C3EBS(boto.ec2.connect_to_region('us-east-1'))
         })

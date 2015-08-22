@@ -41,8 +41,9 @@ def validate_tag(tname, tvalue):
 
 class Tagger(object):
     ''' C3 tagger object '''
-    def __init__(self, conn, tagnames=None):
+    def __init__(self, conn, tagnames=None, verbose=False):
         self.conn = conn
+        self.verbose = verbose
         self.prefix_cost = '/costs_tags.'
         if tagnames:
             self.tagnames = tagnames
@@ -83,25 +84,35 @@ class Tagger(object):
 
     def add_tags(self, rids, tagset, tag_type=None):
         ''' Set one or more tags on a list of IDs '''
+        failed = 0
         for rid in rids:
-            self._add_tags(rid, tagset, tag_type=tag_type)
+            logging.debug('Tagging resource: %s' % rid, self.verbose)
+            if not self._add_tags(rid, tagset, tag_type=tag_type):
+                failed += 1
+        if not failed:
+            return True
+        else:
+            return False
 
     def _add_tags(self, rid, tagset, tag_type=None):
         ''' Set one or more tags on a single ID '''
-        logging.info('Adding %s to %s' % (tagset, id))
+        failed = 0
         if tag_type == 'ec2' or rid[:2] == 'i-':
             rid = self.conn.get_all_instances([rid])
             instance = rid[0].instances[0]
             for tname, tvalue in tagset.items():
+                logging.info('For %s adding, %s: %s' % (rid, tname, tvalue))
                 try:
                     instance.add_tag(tname, tvalue)
                 except EC2ResponseError, msg:
                     logging.error(msg.message)
-            logging.info('INFO: Checking for attached EBS volumes')
+                    failed += 1
+            logging.info('Checking for attached EBS volumes')
             try:
                 volumes = self.conn.get_all_volumes()
             except EC2ResponseError, msg:
                 logging.error(msg.message)
+                failed += 1
             for vol in volumes:
                 if vol.attach_data.instance_id == rid:
                     self._add_tags(vol.id, tagset, tag_type='ebs')
@@ -110,33 +121,45 @@ class Tagger(object):
                 vol = self.conn.get_all_volumes([rid])[0]
             except EC2ResponseError, msg:
                 logging.error(msg.message)
+                failed += 1
             for tname, tvalue in tagset.items():
+                logging.info('For %s adding, %s:%s' % (vol.id, tname, tvalue))
                 try:
                     vol.add_tag(tname, tvalue)
                 except EC2ResponseError, msg:
                     logging.error(msg.message)
+                    failed += 1
         elif type == 'rds':
-            pass
+            return True
         else:
-            self.tag_s3_bucket(rid, tagset)
+            return self.tag_s3_bucket(rid, tagset)
+        if not failed:
+            return True
+        else:
+            return False
 
     def tag_s3_bucket(self, rid, tagset):
         ''' Tags S3 buckets with complicated s3 tagging shenanigans '''
         used_tags = list()
+        failed = 0
+        logging.info('Tagging S3 bucket %s' % rid)
         try:
             bucket = self.conn.get_bucket(rid)
         except EC2ResponseError, msg:
             logging.error(msg.message)
+            failed += 1
         try:
             existing_tags = bucket.get_tags()[0]
         except EC2ResponseError, msg:
             logging.error(msg.message)
             existing_tags = dict()
+        logging.info('Existing tags: %s' % existing_tags)
         try:
             tags = boto.s3.tagging.Tags()
             tset = boto.s3.tagging.TagSet()
         except EC2ResponseError, msg:
             logging.error(msg.message)
+            failed += 1
         for tname, tvalue in tagset.items():
             if tname not in used_tags:
                 try:
@@ -144,15 +167,25 @@ class Tagger(object):
                     used_tags.append(tname)
                 except EC2ResponseError, msg:
                     logging.error(msg.message)
+                    failed += 1
             for tag in existing_tags:
                 if tag.key not in used_tags:
+                    logging.info('Tagging %s, %s: %s' %
+                                 (rid, tag.key, tag.value))
                     try:
                         tset.add_tag(tag.key, tag.value)
                         used_tags.append(tag.key)
                     except EC2ResponseError, msg:
                         logging.error(msg.message)
+                        failed += 1
+            logging.info('Submitting tagset for S3 bucket')
             try:
                 tags.add_tag_set(tset)
                 bucket.set_tags(tags)
             except EC2ResponseError, msg:
                 logging.error(msg.message)
+                failed += 1
+        if not failed:
+            return True
+        else:
+            return False

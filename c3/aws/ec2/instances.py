@@ -19,14 +19,14 @@ from c3.utils import logging
 from boto.exception import EC2ResponseError
 
 
-class CGClusterNotFoundException(Exception):
+class C3ClusterNotFoundException(Exception):
     ''' Cluster not found exception '''
     def __init__(self, value):
-        super(CGClusterNotFoundException, self).__init__(value)
+        super(C3ClusterNotFoundException, self).__init__(value)
         self.name = value
 
     def __str__(self):
-        return repr("CGCluster %s not found" % self.name)
+        return repr("C3Cluster %s not found" % self.name)
 
 
 class TooManySGsException(Exception):
@@ -38,10 +38,10 @@ class TooManySGsException(Exception):
         self.sgs = sgs
 
     def __str__(self):
-        return repr("CGCluster %s not found %s" % (self.name, self.sgs))
+        return repr("C3Cluster %s not found %s" % (self.name, self.sgs))
 
 
-class CGCluster(object):
+class C3Cluster(object):
     ''' The cluster specifc to ct_env and ct_class. '''
     def __init__(self, conn, name, nventory=None, verbose=None):
         self.conn = conn
@@ -49,28 +49,29 @@ class CGCluster(object):
         self.nventory = nventory
         self.verbose = verbose
         self.instances = list()
-        self.cginstances = list()
+        self.c3instances = list()
         self.get_instances()
 
     def get_instances(self):
-        ''' Get both instances and CGinstances '''
+        ''' Get both instances and C3instances '''
         try:
             sgrps = self.conn.get_all_security_groups([self.name])
             if len(sgrps) > 1:
                 raise TooManySGsException(self.name, sgrps)
             if len(sgrps) < 1:
-                raise CGClusterNotFoundException(self.name)
+                raise C3ClusterNotFoundException(self.name)
             sgrp = sgrps[0]
         except:
-            raise CGClusterNotFoundException(self.name)
+            raise C3ClusterNotFoundException(self.name)
         try:
             self.instances = sgrp.instances()
-        except:
-            raise
-        # we should really use CGInstances for everything
+        except EC2ResponseError, msg:
+            logging.error(msg.message)
+        # we should really use C3Instances for everything
         for inst in self.instances:
-            self.cginstances.append(CGInstance(
-                self.conn, inst.id, self.nventory, verbose=self.verbose))
+            self.c3instances.append(C3Instance(
+                self.conn, inst_id=inst.id,
+                nventory=self.nventory, verbose=self.verbose))
         return self.instances
 
     def get_instance_ids(self):
@@ -80,13 +81,13 @@ class CGCluster(object):
             ids.append(iid.id)
         return ids
 
-    def add_instance(self, cginstance):
+    def add_instance(self, c3instance):
         ''' Add instance to cluster. '''
-        self.cginstances.append(cginstance)
+        self.c3instances.append(cginstance)
 
     def destroy(self):
         ''' Terminates instances in cluster. '''
-        for iid in self.cginstances:
+        for iid in self.c3instances:
             if iid.get_state() not in ['terminated']:
                 logging.debug(
                     '%s.terminate() (%s: %s)' %
@@ -96,7 +97,7 @@ class CGCluster(object):
     def hibernate(self):
         ''' Hibernate instances in cluster. '''
         count = 0
-        for iid in self.cginstances:
+        for iid in self.c3instances:
             if iid.hibernate():
                 count += 1
         return count
@@ -104,7 +105,7 @@ class CGCluster(object):
     def wake(self):
         ''' Wake instances in cluster. '''
         count = 0
-        for iid in self.cginstances:
+        for iid in self.c3instances:
             if iid.wake():
                 count += 1
         wcount = self.wait_cluster()
@@ -128,7 +129,7 @@ class CGCluster(object):
     def analyze_cluster(self, desired_state="up"):
         ''' Analyze cluster state. '''
         done = 0
-        for iid in self.cginstances:
+        for iid in self.c3instances:
             state = iid.analyze_state(desired_state)
             if state == 1:
                 return -1
@@ -137,7 +138,7 @@ class CGCluster(object):
         return done
 
 
-class CGInstance(object):
+class C3Instance(object):
     ''' Class that manages instance objects '''
     # pylint:disable=too-many-instance-attributes
     # Required for boto API
@@ -166,7 +167,7 @@ class CGInstance(object):
         # Required for boto API
         try:
             logging.debug(
-                'CGInstance.start(%s, %s, %s, %s, %s, %s, %s, %s, %s)' %
+                'C3Instance.start(%s, %s, %s, %s, %s, %s, %s, %s, %s)' %
                 (ami, sshkey, sgs, len(user_data), hostname, isize, zone,
                  "[tags]", nodegroups), self.verbose)
             self._reservation = self.conn.run_instances(

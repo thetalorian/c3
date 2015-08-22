@@ -20,18 +20,8 @@ import ConfigParser
 import c3.aws.ec2.ebs
 import c3.utils.naming
 import c3.utils.accounts
+from c3.utils import logging
 from ConfigParser import SafeConfigParser
-
-
-def verbose_msg(message, verbose):
-    ''' Function for verbose output. '''
-    if verbose:
-        print 'DEBUG: %s' % message
-
-
-def error_msg(message):
-    ''' Prints message to stderr '''
-    print >> sys.stderr, 'ERROR: %s' % message
 
 
 def get_account_from_conf(conf=None):
@@ -41,10 +31,10 @@ def get_account_from_conf(conf=None):
     try:
         return scp.get('cluster', 'aws_account')
     except ConfigParser.NoSectionError, msg:
-        error_msg(msg)
+        logging.error(msg)
         sys.exit(1)
     except ConfigParser.NoOptionError, msg:
-        error_msg(msg)
+        logging.error(msg)
         sys.exit(1)
 
 
@@ -177,7 +167,7 @@ class ELBConfig(object):
         for item in items:
             if getattr(self, item) is None:
                 msg = '%s not set, disabling ELB' % item
-                error_msg(msg)
+                logging.error(msg)
                 self.enabled = False
         return self.enabled
 
@@ -393,11 +383,11 @@ class ClusterConfig(object):
 
     def read_files(self, conf_files):
         ''' Read in ini files '''
-        verbose_msg('Trying %s\n' % conf_files, self.verbose)
+        logging.debug('Trying %s' % conf_files, self.verbose)
         for ini in conf_files:
             if os.path.exists(ini):
                 self.ini_files.append(ini)
-        verbose_msg('Read %s\n' % self.ini_files, self.verbose)
+        logging.debug('Read %s' % self.ini_files, self.verbose)
         self.ini = ConfigParser.ConfigParser(
             {"AWS_CONF_DIR": os.getenv('AWS_CONF_DIR')})
         self.ini.read(self.ini_files)
@@ -407,10 +397,10 @@ class ClusterConfig(object):
         try:
             return castf(self.ini.get(section, name))
         except ConfigParser.NoSectionError, msg:
-            error_msg(msg)
+            logging.error(msg)
             return None
         except ConfigParser.NoOptionError, msg:
-            error_msg(msg)
+            logging.error(msg)
             return None
 
     def set_ami(self, ami):
@@ -441,7 +431,7 @@ class ClusterConfig(object):
         ''' Return resolved AMI '''
         ami = self.get_ami()
         if ami[:4] == 'ami-':
-            error_msg(
+            logging.error(
                 'AMI statically set to %s. Please use nv graffiti values' % ami)
             return ami
         amis = nventory.get_amis(self.get_cg_region(), ami)
@@ -450,7 +440,7 @@ class ClusterConfig(object):
         if len(amis) == 1:
             newami = amis.values()[0]
             self.set_ami(newami)
-            verbose_msg("Converted '%s' to '%s'" % (ami, newami), self.verbose)
+            logging.debug("Converted '%s' to '%s'" % (ami, newami), self.verbose)
             return newami
         elif len(amis) > 1:
             raise TooManyAMIsError("%s matches too many AMIs: %s" % (ami, amis))
@@ -463,7 +453,7 @@ class ClusterConfig(object):
             self.set_azs(','.join(newazs))
             return len(oldazs) - len(newazs)
         else:
-            error_msg("Trying to limit AZs to %d" % limit)
+            logging.error("Trying to limit AZs to %d" % limit)
         return 0
 
     def set_azs(self, azs):
@@ -495,7 +485,7 @@ class ClusterConfig(object):
             self.overrides['azs'].append(avz)
             return avz
         except IndexError, msg:
-            error_msg(msg)
+            logging.error(msg)
             return None
 
     def get_count_azs(self):
@@ -535,7 +525,7 @@ class ClusterConfig(object):
     def get_dc(self):
         ''' Get the AWS region '''
         if self.get_ini("DEFAULT", "datacenter", str) is not None:
-            error_msg(
+            logging.error(
                 "The 'datacenter' option is no longer read from the INI file")
         return self.get_cg_region()
 
@@ -551,13 +541,13 @@ class ClusterConfig(object):
                 try:
                     udfile = open(ufile, "r")
                 except IOError, msg:
-                    error_msg(msg)
+                    logging.error(msg)
                     return None
                 self.user_data_raw = udfile.read()
                 udfile.close()
         udata = self.user_data_raw
         for key in replacements.keys():
-            verbose_msg(
+            logging.debug(
                 'Replacing %s with %s in %s' %
                 (key, replacements[key], ufile), self.verbose)
             udata = udata.replace(key, replacements[key])
@@ -745,16 +735,16 @@ class ClusterConfig(object):
                     acct, sgrp = remote[3:].split("/")
                     if acct != 'self':
                         acctid = c3.utils.accounts.get_account_id(acct)
-                        verbose_msg('%s == %s' % (acct, acctid), self.verbose)
+                        logging.debug('%s == %s' % (acct, acctid), self.verbose)
                     else:
                         acctid = c3.utils.accounts.get_account_id(
                             self.get_aws_account())
                     if acctid:
                         self.sgrp.add_sg(proto, prt1, prt2, acctid, sgrp)
                     else:
-                        error_msg("Can't find my own account.")
-                verbose_msg(
-                    "INFO: Allowing %s %s for ports %d to %d from %s" %
+                        logging.error("Can't find my own account.")
+                logging.debug(
+                    "Allowing %s %s for ports %d to %d from %s" %
                     (rtype, proto, prt1, prt2, remote), self.verbose)
 
     def get_sg_rules(self):
@@ -783,11 +773,11 @@ class ClusterConfig(object):
                 if rtype == 'Net':
                     cidr = c3.utils.naming.get_cidr(rvalue)
                     if cidr:
-                        verbose_msg('Appending RDS CIDR rule %s' % cidr,
+                        logging.debug('Appending RDS CIDR rule %s' % cidr,
                                     self.verbose)
                         self.rds_sg.add_cidr(cidr)
                 elif rtype == 'CIDR':
-                    verbose_msg('Appending RDS CIDR rule %s' % rvalue,
+                    logging.debug('Appending RDS CIDR rule %s' % rvalue,
                                 self.verbose)
                     self.rds_sg.add_cidr(rvalue)
                 elif rtype == 'SG':
@@ -798,12 +788,12 @@ class ClusterConfig(object):
                         acctid = c3.utils.accounts.get_account_id(
                             self.get_aws_account())
                     if acctid:
-                        verbose_msg(
+                        logging.debug(
                             'Appending RDS SG rule %s:%s' % (acctid, sid),
                             self.verbose)
                         self.rds_sg.add_sg(acctid, sid)
                     else:
-                        print "WARN: Can't find account for %s" % oid
+                        logging.warn("Can't find account for %s" % oid)
 
     def get_rds_sg_rules(self):
         ''' Returns list of RDS SG rules. '''

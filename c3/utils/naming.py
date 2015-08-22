@@ -21,6 +21,7 @@ import re
 import sys
 import c3.utils.accounts
 from nvlib import Nventory
+from c3.utils import logging
 
 
 def find_available_hostnames(group, count=1, account=None,
@@ -105,7 +106,7 @@ def get_network_data():
     try:
         nfile = open(net_file, 'r')
     except IOError, msg:
-        print >> sys.stderr, 'ERROR: %s' % msg
+        logging.error(msg)
         return False
     for line in nfile.readlines():
         ent = line.strip().split(":")

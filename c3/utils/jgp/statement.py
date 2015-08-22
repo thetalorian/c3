@@ -16,6 +16,7 @@
 import sys
 import ipaddr
 import c3.utils.naming
+from c3.utils import logging
 
 
 def make_statement(user_acct, user, path, action,
@@ -79,7 +80,7 @@ def do_condition(condition):
     elif condition == 'empty':
         pass
     else:
-        print >> sys.stderr, ('WARN: Not enough values given to assign '
+        logging.warn('Not enough values given to assign '
                               'condition in %s' % condition)
         return False
 

@@ -7,7 +7,7 @@ import optparse
 import boto.sqs
 import c3.utils.accounts
 import c3.utils.naming
-import c3.utils.tag
+import c3.utils.tagger
 import c3.utils.config
 import c3.aws.ec2.elb
 import c3.aws.ec2.ebs
@@ -17,7 +17,7 @@ from zambi import ZambiConn
 from c3.utils import logging
 from boto.exception import SQSError
 from boto.exception import EC2ResponseError
-from c3.aws.ec2.instances import CGInstance
+from c3.aws.ec2.instances import C3Instance
 
 
 def parser_setup():
@@ -173,16 +173,16 @@ def check_timed_out(start_time, timeout, verbose=False):
 def nv_connect(nv_ini):
     ''' Get a Nnventory connection object. '''
     try:
-        nventory = Nventory(ini=nv_ini)
+        nventory = Nventory(ini_file=nv_ini)
         nventory.login()
     except Exception:
         raise
     return nventory
 
 
-def cluster_tagger(verbose=None):
+def cluster_tagger(conn, verbose=None):
     ''' Initialize the tagger. '''
-    return c3.utils.tag.cgTagger(verbose=verbose)
+    return c3.utils.tagger.Tagger(conn, verbose=verbose)
 
 
 class C3EC2Provision(object):
@@ -274,10 +274,10 @@ class C3EC2Provision(object):
         nventory = nv_connect(self.opts.nv_ini)
         self.conn = self.aws_conn('ec2')
         try:
-            cgc = c3.aws.ec2.instances.CGCluster(
+            cgc = c3.aws.ec2.instances.C3Cluster(
                 self.conn, self.cconfig.get_primary_sg(),
                 nventory, verbose=self.opts.verbose)
-        except c3.aws.ec2.instances.CGClusterNotFoundException, msg:
+        except c3.aws.ec2.instances.C3ClusterNotFoundException, msg:
             logging.error("Problem finding cluster (%s)" % (msg))
             sys.exit(1)
         except c3.aws.ec2.instances.TooManySGsException, error:
@@ -292,7 +292,7 @@ class C3EC2Provision(object):
         ''' Get a connection to the ELB service. '''
         conn_elb = self.aws_conn('elb')
         try:
-            c3elb = c3.aws.ec2.elb.CGELB(
+            c3elb = c3.aws.ec2.elb.C3ELB(
                 conn_elb, self.cconfig.get_elb_name(),
                 self.cconfig.elb, find_only=find_only)
         except c3.aws.ec2.elb.ELBNotFoundException, error:
@@ -334,11 +334,11 @@ class C3EC2Provision(object):
     def cluster_status(self):
         ''' Check the status of a cluster. '''
         cgc = self.cluster()
-        for instance in cgc.cginstances:
+        for instance in cgc.c3instances:
             elbm = ""
             if self.cconfig.elb.enabled:
                 c3elb = self.elb_connection()
-                if c3elb.instanceConfigured(instance.id):
+                if c3elb.instance_configured(instance.inst_id):
                     elbm = "ELB"
             ebsm = ""
             if instance.get_ebs_optimized():
@@ -348,17 +348,20 @@ class C3EC2Provision(object):
                 eipm = "EIP"
             logging.info(
                 "%s %s %s %s %s %s" %
-                (instance.id, instance.name, instance.state, elbm, ebsm, eipm))
+                (instance.inst_id, instance.name,
+                 instance.state, elbm, ebsm, eipm))
         sys.exit(0)
 
     def cluster_retag(self):
         ''' Retag the cluster. '''
+        logging.info('Retagging cluster %s' % self.cconfig.get_primary_sg())
         cgc = self.cluster()
-        tagger = cluster_tagger(verbose=self.opts.verbose)
-        if (not tagger.addTags(
-                cgc.getInstanceIDs(), self.cconfig.get_tagset())):
-            logging.error("Error: Problem addings tags!")
+        tagger = cluster_tagger(self.conn, verbose=self.opts.verbose)
+        if not tagger.add_tags(
+                cgc.get_instance_ids(), self.cconfig.get_tagset()):
+            logging.error('Problem addings tags')
             sys.exit(1)
+        logging.info('Retag cluster complete')
         sys.exit(0)
 
     def check_config_types(self):
@@ -436,10 +439,10 @@ class C3EC2Provision(object):
                 self.cconfig.getAWSRegion(), 'ctgrd.com')
             start_time = time.time()
             logging.debug(
-                'DEBUG: Creating new servers:\n\t%s' % self.hostnames,
+                'Creating new servers:\n\t%s' % self.hostnames,
                 self.opts.verbose)
             for host in self.hostnames:
-                servers[host] = CGInstance(
+                servers[host] = C3Instance(
                     conn=self.conn, nventory=nventory,
                     verbose=self.opts.verbose)
                 userdata = self.cconfig.getUserData(
@@ -492,7 +495,7 @@ class C3EC2Provision(object):
 
     def create_ebs(self, used_az, host, instance_id):
         ''' Create new EBS volumes. '''
-        cgebs = c3.aws.ec2.ebs.CGEBS(self.conn)
+        cgebs = c3.aws.ec2.ebs.C3EBS(self.conn)
         for ebsv in self.cconfig.get_ebs_config():
             logging.info(
                 "Creating EBS volume %s for %s" %
@@ -562,7 +565,7 @@ class C3EC2Provision(object):
 
     def attach_ebs(self):
         ''' Attaches EBS volumes to instances. '''
-        cgebs = c3.aws.ec2.ebs.CGEBS(self.conn)
+        cgebs = c3.aws.ec2.ebs.C3EBS(self.conn)
         for vol_id in self.volume_instances:
             logging.info("Attaching EBS volume %s on %s to %s" % (
                 vol_id, self.volume_instances[vol_id],
@@ -575,7 +578,7 @@ class C3EC2Provision(object):
 
     def tag_by_instance(self, servers):
         ''' Tag resources tied to an instnace ID. '''
-        tagger = cluster_tagger(verbose=self.opts.verbose)
+        tagger = cluster_tagger(self.conn, verbose=self.opts.verbose)
         for host in self.hostnames:
             try:
                 instance_id = servers[host].get_id()
@@ -615,7 +618,7 @@ def main():
         parser.error('Too many arguments')
     if opts.config_file is None:
         parser.print_help()
-        parser.error('ERROR: "-c CONFIG_FILE" is required')
+        parser.error('"-c CONFIG_FILE" is required')
     C3EC2Provision(opts)
 
 

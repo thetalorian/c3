@@ -18,6 +18,7 @@ Utilities to deal with CGM-standard accounts
 
 import os
 import sys
+from c3.utils import logging
 
 
 def get_account_name(account_id=None, mapfile=None):
@@ -50,7 +51,7 @@ def translate_account(account_id=None, account_name=None, mapfile=None):
     try:
         mfile = open(mapfile, 'r')
     except IOError, msg:
-        print >> sys.stderr, 'ERROR: %s' % msg
+        logging.error(msg)
         return False
     for line in mfile.readlines():
         if len(line.split(':')) == 3:
@@ -62,8 +63,8 @@ def translate_account(account_id=None, account_name=None, mapfile=None):
                 if aws_name.rstrip() == account_name:
                     return aws_id.rstrip()
     if account_id:
-        msg = "ERROR: Couldn't translate ID %s" % account_id
+        msg = "Couldn't translate ID %s" % account_id
     elif account_name:
-        msg = "ERROR: Couldn't translate account_name %s" % account_name
-    print >> sys.stderr, msg
+        msg = "Couldn't translate account_name %s" % account_name
+    logging.error(msg)
     return None
