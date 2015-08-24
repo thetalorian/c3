@@ -114,7 +114,6 @@ class ConfigNotFoundException(Exception):
     def __str__(self):
         return self.value
 
-
 class EBSConfig(object):
     ''' A class to hold EBS configuration data '''
     def __init__(self):
@@ -387,21 +386,23 @@ class ClusterConfig(object):
         for ini in conf_files:
             if os.path.exists(ini):
                 self.ini_files.append(ini)
-        logging.debug('Read %s' % self.ini_files, self.verbose)
-        self.ini = ConfigParser.ConfigParser(
-            {"AWS_CONF_DIR": os.getenv('AWS_CONF_DIR')})
+        logging.debug('Reading %s' % self.ini_files, self.verbose)
+        self.ini = ConfigParser.ConfigParser({
+            'AWS_BASE_DIR': os.getenv('AWS_BASE_DIR'),
+            'AWS_CONF_DIR': os.getenv('AWS_CONF_DIR')})
         self.ini.read(self.ini_files)
 
-    def get_ini(self, section, name, castf):
+    def get_ini(self, section, name, castf, fallback=None):
         ''' Get a setting from the ini files '''
         try:
             return castf(self.ini.get(section, name))
         except ConfigParser.NoSectionError, msg:
             logging.error(msg)
-            return None
+            return fallback
         except ConfigParser.NoOptionError, msg:
             logging.error(msg)
-            return None
+            return fallback
+        return fallback
 
     def set_ami(self, ami):
         ''' Set AMI '''
@@ -531,15 +532,16 @@ class ClusterConfig(object):
 
     def get_user_data_file(self):
         ''' Return the userdata file '''
-        return self.get_ini("cluster", "user_data_file", str)
+        return self.get_ini("cluster", "user_data_file", str, None)
 
     def get_user_data(self, replacements=None):
         ''' Get userdata and set replacements '''
-        ufile = self.get_user_data_file()
+        path = self.get_user_data_file()
+        logging.debug('user_data_file: %s' % path, self.verbose)
         if not self.user_data_raw:
-            if os.path.exists(ufile):
+            if os.path.exists(path):
                 try:
-                    udfile = open(ufile, "r")
+                    udfile = file(path, "r")
                 except IOError, msg:
                     logging.error(msg)
                     return None
@@ -549,7 +551,7 @@ class ClusterConfig(object):
         for key in replacements.keys():
             logging.debug(
                 'Replacing %s with %s in %s' %
-                (key, replacements[key], ufile), self.verbose)
+                (key, replacements[key], path), self.verbose)
             udata = udata.replace(key, replacements[key])
         return udata
 
@@ -560,6 +562,7 @@ class ClusterConfig(object):
         self.tagset['Project'] = self.get_ini("tags", "project", str)
         if any(ent for ent in self.ini_files if ent.endswith('meta.ini')):
             self.tagset['Component'] = self.get_ini("tags", "component", str)
+            self.tagset['Env'] = self.get_ini("tags", "env", str)
         else:
             comp = self.get_ini("tags", "component", str)
             if comp[:4] == self.server_class + ' ':
@@ -568,10 +571,7 @@ class ClusterConfig(object):
             else:
                 self.tagset['Component'] = "%s %s" % (
                     self.server_class, self.get_ini("tags", "component", str))
-        if self.get_ini("tags", "env", str):
-            self.tagset['Env'] = self.get_ini("tags", "env", str)
-        else:
-            self.tagset['Env'] = self.server_env
+            self.tagset['Env'] = self.get_server_env()
         return self.tagset
 
     def get_launch_timeout(self):

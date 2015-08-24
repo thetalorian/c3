@@ -211,10 +211,9 @@ class C3EC2Provision(object):
                 ini_file=self.opts.config_file,
                 account_name=account_name,
                 verbose=self.opts.verbose)
-        except c3.utils.config.InvalidAZError:
-            raise
-        except c3.utils.config.ConfigNotFoundException:
-            raise
+        except c3.utils.config.ConfigNotFoundException, msg:
+            logging.error(msg)
+            sys.exit(1)
         # this one MUST be "is not None", or a value of 0 won't work
         if self.opts.count is not None:
             logging.debug("setting count", self.opts.verbose)
@@ -226,7 +225,7 @@ class C3EC2Provision(object):
             logging.debug("setting AZs", self.opts.verbose)
             try:
                 self.cconfig.set_azs(self.opts.azs)
-            except c3.utils.config.invalidAZError, msg:
+            except c3.utils.config.InvalidAZError, msg:
                 logging.error(msg)
                 sys.exit(1)
         if self.opts.size:
@@ -294,45 +293,55 @@ class C3EC2Provision(object):
         try:
             c3elb = c3.aws.ec2.elb.C3ELB(
                 conn_elb, self.cconfig.get_elb_name(),
-                self.cconfig.elb, find_only=find_only)
-        except c3.aws.ec2.elb.ELBNotFoundException, error:
-            logging.error('ELB not found' % error)
+                self.cconfig.get_elb_config(), find_only=find_only)
+        except EC2ResponseError, msg:
+            logging.error(msg.message)
         return c3elb
 
     def cluster_destroy(self):
         ''' Destroy mode, delete all components for this cluster. '''
+        logging.info("Tearing down %s in %s" % (
+            self.cconfig.get_primary_sg(), self.cconfig.get_aws_region()))
         cgc = self.cluster()
-        logging.info("Destroying cluster %s in %s" % (
-            self.cconfig.get_primary_sg(), self.cconfig.getAWSRegion()))
-        cgc.destroy()
+        count = cgc.destroy()
+        logging.info('Terminated %d instance(s)' % count)
         if self.cconfig.elb.enabled:
             c3elb = self.elb_connection()
-            c3elb.destroy()
-            logging.info('ELB %s removed' % c3elb.name)
+            if c3elb.destroy():
+                logging.info('ELB %s deleted' % c3elb.name)
+            else:
+                logging.error('Deleting ELB %s failed')
         sgrp = c3.aws.ec2.security_groups.SecurityGroups(
             self.conn, self.cconfig.get_primary_sg(), find_only=True)
-        sgrp.destroy()
-        logging.info("Security Group %s removed" % sgrp.name)
+        if sgrp.destroy():
+            logging.info("Security Group %s removed" % sgrp.name)
+        logging.info('Tear down complete for %s' %
+                     self.cconfig.get_primary_sg())
         sys.exit(0)
 
     def cluster_wake(self):
         ''' Wake a hibernating cluster. '''
+        logging.info('Waking up %s' % self.cconfig.get_primary_sg())
         cgc = self.cluster()
         count = cgc.wake()
-        logging.info("%d instances in %s have been woken" % (
+        logging.info("%d instance(s) in %s have been started" % (
             count, self.cconfig.get_primary_sg()))
+        logging.info('Waking up instances complete')
         sys.exit(0)
 
     def cluster_hibernate(self):
         ''' Hibernates a running cluster. '''
+        logging.info('Hibernating %s' % self.cconfig.get_primary_sg())
         cgc = self.cluster()
         count = cgc.hibernate()
-        logging.info("%d instances in %s have been put to sleep" % (
+        logging.info("%d instance(s) in %s have been hibernated" % (
             count, self.cconfig.get_primary_sg()))
+        logging.info('Hibernating instances complete')
         sys.exit(0)
 
     def cluster_status(self):
         ''' Check the status of a cluster. '''
+        logging.info('Checking status for %s' % self.cconfig.get_primary_sg())
         cgc = self.cluster()
         for instance in cgc.c3instances:
             elbm = ""
@@ -350,6 +359,7 @@ class C3EC2Provision(object):
                 "%s %s %s %s %s %s" %
                 (instance.inst_id, instance.name,
                  instance.state, elbm, ebsm, eipm))
+        logging.info('Status complete')
         sys.exit(0)
 
     def cluster_retag(self):
@@ -368,12 +378,11 @@ class C3EC2Provision(object):
         ''' Check if there is an assigned ssh key. '''
         if self.cconfig.get_count() and not self.cconfig.get_ssh_key():
             logging.error(
-                "You're trying to start instances, ",
+                "You're trying to start instances, "
                 "but don't have an SSH key set")
             sys.exit(1)
         nventory = nv_connect(self.opts.nv_ini)
-        if not self.cconfig.get_resolved_ami(nventory,
-                                             verbose=self.opts.verbose):
+        if not self.cconfig.get_resolved_ami(nventory):
             logging.error('Getting AMI failed, exiting')
             sys.exit(1)
 
@@ -385,12 +394,12 @@ class C3EC2Provision(object):
         for rule in self.cconfig.get_cidr_rules():
             primary_sg.add_ingress(
                 [rule['fport'], rule['lport']], rule['proto'],
-                rule['cidr'], verbose=self.opts.verbose)
+                rule['cidr'])
         # add SG-to-SG rules
         for rule in self.cconfig.get_sg_rules():
             primary_sg.add_ingress(
                 [rule['fport'], rule['lport']], rule['proto'],
-                None, rule['owner'], rule['sg'], verbose=self.opts.verbose)
+                None, rule['owner'], rule['sg'])
 
     def userdata_replacements(self, host):
         ''' Replace properties to be passed to userdata. '''
@@ -404,7 +413,9 @@ class C3EC2Provision(object):
         else:
             raid_level = 0
             raid_device = "None"
+            logging.debug('No RAID to configure', self.opts.verbose)
         fs_type = self.cconfig.get_fs_type()
+        logging.debug('Setting fs_type: %s' % fs_type, self.opts.verbose)
         replacements = {
             '__HOSTNAME__': '"%s"' % host,
             '__DEVICES__': '%s' % len(self.cconfig.get_ebs_config()),
@@ -413,6 +424,8 @@ class C3EC2Provision(object):
             '__RAID_DEVICE__': '%s' % raid_device,
             '__FS_TYPE__': '%s' % fs_type,
             '__SKIP_USERDATA__': '%s' % self.opts.skip_userdata}
+        logging.debug('Setting user Data Replacements: %s' %
+                      replacements, self.opts.verbose)
         return replacements
 
     def cluster_create(self):
@@ -436,16 +449,16 @@ class C3EC2Provision(object):
             self.hostnames = c3.utils.naming.find_available_hostnames(
                 self.cconfig.get_primary_sg(), self.cconfig.get_count(),
                 self.cconfig.get_aws_account(),
-                self.cconfig.getAWSRegion(), 'ctgrd.com')
+                self.cconfig.get_aws_region(), 'ctgrd.com', nventory)
             start_time = time.time()
             logging.debug(
-                'Creating new servers:\n\t%s' % self.hostnames,
+                'Creating new servers: %s' % self.hostnames,
                 self.opts.verbose)
             for host in self.hostnames:
                 servers[host] = C3Instance(
                     conn=self.conn, nventory=nventory,
                     verbose=self.opts.verbose)
-                userdata = self.cconfig.getUserData(
+                userdata = self.cconfig.get_user_data(
                     self.userdata_replacements(host))
                 tries = 1
                 if self.opts.substitute_zones:
@@ -458,7 +471,6 @@ class C3EC2Provision(object):
                         self.cconfig.get_ami(), self.cconfig.get_ssh_key(),
                         self.cconfig.get_sgs(), userdata,
                         host, self.cconfig.get_size(), used_az,
-                        self.cconfig.get_tagset(),
                         self.cconfig.get_node_groups(),
                         self.cconfig.get_allocate_eips(),
                         self.cconfig.get_use_ebs_optimized())
@@ -469,8 +481,7 @@ class C3EC2Provision(object):
                         if tries:
                             logging.warn(
                                 'Failed to create %s in %s, retrying' %
-                                (host, used_az),
-                                self.opts.verbose)
+                                (host, used_az))
                 else:
                     logging.error(
                         "Failed to create %s in all AZs, trying next instance" %
@@ -560,7 +571,6 @@ class C3EC2Provision(object):
                 logging.error(msg)
                 instance_id = None
             if instance_id:
-                c3elb.add_azs([servers[host].get_az()])
                 c3elb.add_instances([instance_id])
 
     def attach_ebs(self):
@@ -589,7 +599,7 @@ class C3EC2Provision(object):
             except AttributeError:
                 instance_id = None
                 logging.warn(
-                    'Failed to set cost tags on failed ',
+                    'Failed to set cost tags on failed '
                     'instance %s' % host)
 
     def puppet_whitelist(self):

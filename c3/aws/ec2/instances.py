@@ -83,23 +83,38 @@ class C3Cluster(object):
 
     def add_instance(self, c3instance):
         ''' Add instance to cluster. '''
-        self.c3instances.append(cginstance)
+        self.c3instances.append(c3instance)
 
     def destroy(self):
         ''' Terminates instances in cluster. '''
+        count = 0
         for iid in self.c3instances:
             if iid.get_state() not in ['terminated']:
-                logging.debug(
-                    '%s.terminate() (%s: %s)' %
-                    (iid.id, iid.name, iid.get_state()), self.verbose)
-                iid.destroy()
+                if iid.destroy():
+                    logging.info(
+                        'Waiting for %s (%s) to terminate' %
+                        (iid.name, iid.inst_id))
+                    tcount = self.wait_cluster(desired_state='down')
+                    count += tcount
+        if count != len(self.c3instances):
+            logging.warn(
+                'Asked for %d but only %d terminated' %
+                (len(self.c3instances), count))
+        return count
+
 
     def hibernate(self):
         ''' Hibernate instances in cluster. '''
         count = 0
         for iid in self.c3instances:
             if iid.hibernate():
-                count += 1
+                logging.info('Waiting for %s to stop' % iid.name)
+                hcount = self.wait_cluster(desired_state='down')
+                count += hcount
+        if count != len(self.c3instances):
+            logging.warn(
+                'Asked for %d but only %d stopped' %
+                (len(self.c3instances), count))
         return count
 
     def wake(self):
@@ -107,12 +122,14 @@ class C3Cluster(object):
         count = 0
         for iid in self.c3instances:
             if iid.wake():
-                count += 1
-        wcount = self.wait_cluster()
-        if wcount != count:
+                logging.info('Waiting for %s to start' % iid.name)
+                wcount = self.wait_cluster()
+                count += wcount
+        if count != len(self.c3instances):
             logging.warn(
-                'Asked for %d but only %d started' %(count, wcount))
-        return wcount
+                'Asked for %d but only %d started' %
+                (len(self.c3instances), count))
+        return count
 
     def wait_cluster(self, desired_state="up", timeout=120):
         ''' Waits for cluster to start. '''
@@ -167,9 +184,9 @@ class C3Instance(object):
         # Required for boto API
         try:
             logging.debug(
-                'C3Instance.start(%s, %s, %s, %s, %s, %s, %s, %s, %s)' %
+                'C3Instance.start(%s, %s, %s, %s, %s, %s, %s, %s)' %
                 (ami, sshkey, sgs, len(user_data), hostname, isize, zone,
-                 "[tags]", nodegroups), self.verbose)
+                 nodegroups), self.verbose)
             self._reservation = self.conn.run_instances(
                 ami, 1, 1, sshkey, sgs, user_data, None, isize, zone,
                 None, None, False, None, None, ebs_optimized=use_ebsoptimized)
@@ -208,7 +225,7 @@ class C3Instance(object):
     def nv_set_state(self, status):
         ''' Set nVentory state for instance '''
         if self.nventory:
-            return self.nventory.setStatus(self.inst_id, status)
+            return self.nventory.set_status(self.inst_id, status)
 
     def get_id(self):
         ''' Return the EC2 Instance ID '''
@@ -350,6 +367,7 @@ class C3Instance(object):
         ''' Destroy EIP address associated with an EC2 instance '''
         eip = self.get_associated_eip()
         if eip:
+            logging.info('Disassociating EIP from %s' % self.name)
             try:
                 eip.disassociate()
             except EC2ResponseError, msg:

@@ -14,10 +14,11 @@
 #
 ''' This module managed ELB objects '''
 from c3.utils import logging
-from boto.exception import EC2ResponseError
+from boto.ec2.elb import HealthCheck
+from boto.exception import BotoServerError
 
 
-class CGELB(object):
+class C3ELB(object):
     ''' This class is used to manage ELBs '''
     # pylint:disable=too-many-arguments
     # Appropriate number of arguments for an ELB
@@ -26,6 +27,8 @@ class CGELB(object):
         self.conn = conn
         self.name = name
         self.conf = conf
+        self.azs_used = conf.get_azs()
+        self.hc = None
         self.verbose = verbose
         self.find_only = find_only
         self.elb_listeners = [
@@ -34,8 +37,8 @@ class CGELB(object):
             self.elb = self.conn.get_all_load_balancers(
                 load_balancer_names=[self.name])[0]
             logging.debug('Found existing ELB: %s' % self.name, self.verbose)
-        except EC2ResponseError, msg:
-            if not self.find_only:
+        except BotoServerError, msg:
+            if self.find_only is False:
                 self.create_elb()
             else:
                 logging.error(msg.message)
@@ -49,7 +52,7 @@ class CGELB(object):
         logging.debug('Adding instances to ELB: %s' % instances, self.verbose)
         try:
             self.elb.register_instances(instances)
-        except EC2ResponseError, msg:
+        except BotoServerError, msg:
             logging.error(msg.message)
 
     def remove_instances(self, instances):
@@ -58,32 +61,50 @@ class CGELB(object):
             "Removing instances from ELB: %s" % instances, self.verbose)
         try:
             self.elb.deregister_instances(instances)
-        except EC2ResponseError, msg:
+        except BotoServerError, msg:
             logging.error(msg.message)
 
     def ensure_azs(self):
         ''' Ensure AZs add to ELB from config '''
-        azs = self.conf.get_azs()
+        azs = self.azs_used
         logging.debug("Trying to add AZs to ELB: %s" % azs, self.verbose)
         for zone in azs:
             if zone not in self.elb.availability_zones:
                 logging.debug("Adding %s to ELB" % azs, self.verbose)
                 try:
                     self.elb.enable_zones(zone)
-                except EC2ResponseError, msg:
+                except BotoServerError, msg:
                     logging.error(msg.message)
+        logging.info('Zones configured for ELB: %s' % self.azs_used)
 
     def ensure_hc(self):
         ''' Ensure HC is set for ELB '''
-        if not self.elb.health_check:
+        if self.elb.health_check is None:
+            self.get_hc()
             try:
-                self.elb.configure_health_check(
+                self.elb.configure_health_check(self.hc)
+            except BotoServerError, msg:
+                logging.error(msg.message)
+        else:
+            self.get_hc()
+        logging.info('ELB HC: %s' % self.hc)
+
+    def get_hc(self):
+        ''' Return the healtcheck object '''
+        if self.hc:
+            return self.hc
+        else:
+            try:
+                self.hc = HealthCheck(
                     self.conf.hc_access_point,
-                    self.conf.hc_interval, self.conf.hc_target,
+                    self.conf.hc_interval,
+                    self.conf.hc_target,
                     self.conf.hc_healthy_threshold,
                     self.conf.hc_unhealthy_threshold)
-            except EC2ResponseError, msg:
+            except BotoServerError, msg:
                 logging.error(msg.message)
+                return None
+            return self.hc
 
     def get_dns(self):
         ''' Return dns_name for ELB '''
@@ -94,7 +115,7 @@ class CGELB(object):
         try:
             return self.conn.get_all_load_balancers(
                 load_balancer_names=[self.name])
-        except EC2ResponseError, msg:
+        except BotoServerError, msg:
             logging.error(msg.message)
             return None
 
@@ -111,8 +132,8 @@ class CGELB(object):
         logging.debug('Create ELB %s' % self.name, self.verbose)
         try:
             self.elb = self.conn.create_load_balancer(
-                self.name, self.conf.get_azs(), self.elb_listeners)
-        except EC2ResponseError, msg:
+                self.name, self.azs_used, self.elb_listeners)
+        except BotoServerError, msg:
             logging.error(msg.message)
             return None
         logging.info('Created %s: %s' % (self.name, self.elb))
@@ -128,6 +149,6 @@ class CGELB(object):
         ''' Destroy an ELB '''
         try:
             return self.elb.delete()
-        except EC2ResponseError, msg:
+        except BotoServerError, msg:
             logging.error(msg.message)
             return None
