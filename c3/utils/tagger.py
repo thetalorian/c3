@@ -101,7 +101,7 @@ class Tagger(object):
             rid = self.conn.get_all_instances([rid])
             instance = rid[0].instances[0]
             for tname, tvalue in tagset.items():
-                logging.info('For %s adding, %s: %s' % (rid, tname, tvalue))
+                logging.info('For %s adding, %s: %s' % (instance, tname, tvalue))
                 try:
                     instance.add_tag(tname, tvalue)
                 except EC2ResponseError, msg:

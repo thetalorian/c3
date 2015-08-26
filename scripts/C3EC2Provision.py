@@ -435,17 +435,15 @@ class C3EC2Provision(object):
         success = 0
         failed = 0
         self.check_config_types()
-        logging.debug(
-            'Creating %d %s in %s using %s.' % (
-                self.cconfig.get_count(), self.cconfig.get_size(),
-                self.cconfig.get_azs(), self.cconfig.get_ami()),
-            self.opts.verbose)
+        logging.info('Applying SG Rules to %s' % self.cconfig.get_primary_sg())
         self.sg_rules()
         if self.cconfig.get_count():
-            logging.debug(
-                'Creating %d servers' %
-                self.cconfig.get_count(), self.opts.verbose)
             servers = dict()
+            logging.debug(
+                'Creating %d %s in %s using %s.' % (
+                    self.cconfig.get_count(), self.cconfig.get_size(),
+                    self.cconfig.get_azs(), self.cconfig.get_ami()),
+                self.opts.verbose)
             self.hostnames = c3.utils.naming.find_available_hostnames(
                 self.cconfig.get_primary_sg(), self.cconfig.get_count(),
                 self.cconfig.get_aws_account(),
@@ -503,6 +501,7 @@ class C3EC2Provision(object):
             self.tag_by_instance(servers)
             if self.cconfig.get_server_env() == 'prd':
                 self.puppet_whitelist()
+        logging.info('Cluster config complete')
 
     def create_ebs(self, used_az, host, instance_id):
         ''' Create new EBS volumes. '''

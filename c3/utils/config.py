@@ -733,12 +733,16 @@ class ClusterConfig(object):
                     self.sgrp.add_cidr(proto, prt1, prt2, cidr)
                 elif remote[:3] == 'SG:':
                     acct, sgrp = remote[3:].split("/")
-                    if acct != 'self':
-                        acctid = c3.utils.accounts.get_account_id(acct)
-                        logging.debug('%s == %s' % (acct, acctid), self.verbose)
+                    if acct == 'self':
+                        acctid = c3.utils.accounts.get_account_id(
+                            account_name=self.get_aws_account())
+                    elif acct == 'amazon-elb':
+                        logging.debug('acctid set to amazon-elb', self.verbose)
+                        acctid = 'amazon-elb'
                     else:
                         acctid = c3.utils.accounts.get_account_id(
-                            self.get_aws_account())
+                            account_name=acct)
+                        logging.debug('%s == %s' % (acct, acctid), self.verbose)
                     if acctid:
                         self.sgrp.add_sg(proto, prt1, prt2, acctid, sgrp)
                     else:
