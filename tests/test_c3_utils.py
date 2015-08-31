@@ -66,7 +66,8 @@ def test_find_available_hostnames():
         'devweb', count=2)
     assert hosts == False
     hosts = c3naming.find_available_hostnames(
-        'devweb', count=2, account='opsqa', domain='ctgrd.com')
+        'devweb', count=2, account='opsqa',
+        region='us-east-1',domain='ctgrd.com')
     assert hosts == ['aws1devweb1.opsqa.ctgrd.com',
                     'aws1devweb2.opsqa.ctgrd.com']
 
