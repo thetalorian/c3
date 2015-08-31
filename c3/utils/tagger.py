@@ -101,7 +101,8 @@ class Tagger(object):
             rid = self.conn.get_all_instances([rid])
             instance = rid[0].instances[0]
             for tname, tvalue in tagset.items():
-                logging.info('For %s adding, %s: %s' % (instance, tname, tvalue))
+                logging.info('For %s adding, %s: %s' %
+                             (instance, tname, tvalue))
                 try:
                     instance.add_tag(tname, tvalue)
                 except EC2ResponseError, msg:
@@ -114,9 +115,10 @@ class Tagger(object):
                 logging.error(msg.message)
                 failed += 1
             for vol in volumes:
-                if vol.attach_data.instance_id == rid:
+                if vol.attach_data.instance_id == instance.id:
+                    logging.info('Found attached vol: %s' % vol.id)
                     self._add_tags(vol.id, tagset, tag_type='ebs')
-        elif type == 'ebs' or rid[:4] == 'vol-':
+        elif tag_type == 'ebs' or rid[:4] == 'vol-':
             try:
                 vol = self.conn.get_all_volumes([rid])[0]
             except EC2ResponseError, msg:
@@ -129,7 +131,7 @@ class Tagger(object):
                 except EC2ResponseError, msg:
                     logging.error(msg.message)
                     failed += 1
-        elif type == 'rds':
+        elif tag_type == 'rds':
             return True
         else:
             return self.tag_s3_bucket(rid, tagset)

@@ -344,21 +344,39 @@ class C3EC2Provision(object):
         logging.info('Checking status for %s' % self.cconfig.get_primary_sg())
         cgc = self.cluster()
         for instance in cgc.c3instances:
-            elbm = ""
-            if self.cconfig.elb.enabled:
+            elbm = None
+            elb_hc = None
+            elb_azs = None
+            ebs_vols = None
+            try:
                 c3elb = self.elb_connection()
+            except TypeError:
+                c3elb = None
+            if c3elb:
                 if c3elb.instance_configured(instance.inst_id):
-                    elbm = "ELB"
-            ebsm = ""
-            if instance.get_ebs_optimized():
-                ebsm = "EBS+"
-            eipm = ""
-            if instance.get_associated_eip():
-                eipm = "EIP"
-            logging.info(
-                "%s %s %s %s %s %s" %
-                (instance.inst_id, instance.name,
-                 instance.state, elbm, ebsm, eipm))
+                    elbm = c3elb.get_dns()
+                    elb_hc = c3elb.get_hc()
+                    elb_azs = c3elb.get_azs()
+            ebsm = instance.get_ebs_optimized()
+            eipm = instance.get_associated_eip()
+            vols = instance.get_non_root_volumes()
+            if vols:
+                ebs_vols = list()
+                for key, value in vols.items():
+                    ebs_vols.append('%s: %s' % (str(key), str(value)))
+            msg = '''
+            Instance %s
+                ID: %s
+                State: %s
+                EBS Optimized: %s
+                EBS Volumes: %s
+                EIP: %s
+                ELB %s
+                    Health Check: %s
+                    Availability Zones: %s
+            ''' % (instance.name, instance.inst_id, instance.state,
+                   ebsm, ebs_vols, eipm, elbm, elb_hc, elb_azs)
+            logging.info(msg)
         logging.info('Status complete')
         sys.exit(0)
 

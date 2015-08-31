@@ -21,6 +21,7 @@ from boto.exception import BotoServerError
 class C3ELB(object):
     ''' This class is used to manage ELBs '''
     # pylint:disable=too-many-arguments
+    # pylint:disable=too-many-instance-attributes
     # Appropriate number of arguments for an ELB
     def __init__(self, conn, name, conf, verbose=False, find_only=False):
         self.elb = None
@@ -28,7 +29,6 @@ class C3ELB(object):
         self.name = name
         self.conf = conf
         self.azs_used = conf.get_azs()
-        self.hc = None
         self.verbose = verbose
         self.find_only = find_only
         self.elb_listeners = [
@@ -40,12 +40,11 @@ class C3ELB(object):
         except BotoServerError, msg:
             if self.find_only is False:
                 self.create_elb()
+                self.set_hc()
+                self.set_azs()
             else:
                 logging.error(msg.message)
                 return None
-        if self.elb:
-            self.ensure_hc()
-            self.ensure_azs()
 
     def add_instances(self, instances):
         ''' Add instances to ELB '''
@@ -64,7 +63,7 @@ class C3ELB(object):
         except BotoServerError, msg:
             logging.error(msg.message)
 
-    def ensure_azs(self):
+    def set_azs(self):
         ''' Ensure AZs add to ELB from config '''
         azs = self.azs_used
         logging.debug("Trying to add AZs to ELB: %s" % azs, self.verbose)
@@ -77,34 +76,27 @@ class C3ELB(object):
                     logging.error(msg.message)
         logging.info('Zones configured for ELB: %s' % self.azs_used)
 
-    def ensure_hc(self):
+    def set_hc(self):
         ''' Ensure HC is set for ELB '''
-        if self.elb.health_check is None:
-            self.get_hc()
-            try:
-                self.elb.configure_health_check(self.hc)
-            except BotoServerError, msg:
-                logging.error(msg.message)
-        else:
-            self.get_hc()
-        logging.info('ELB HC: %s' % self.hc)
+        hck = HealthCheck(
+            self.conf.hc_access_point,
+            self.conf.hc_interval,
+            self.conf.hc_target,
+            self.conf.hc_healthy_threshold,
+            self.conf.hc_unhealthy_threshold)
+        logging.info('Configuring HC: %s' % hck)
+        try:
+            self.elb.configure_health_check(hck)
+        except BotoServerError, msg:
+            logging.error(msg.message)
 
     def get_hc(self):
         ''' Return the healtcheck object '''
-        if self.hc:
-            return self.hc
-        else:
-            try:
-                self.hc = HealthCheck(
-                    self.conf.hc_access_point,
-                    self.conf.hc_interval,
-                    self.conf.hc_target,
-                    self.conf.hc_healthy_threshold,
-                    self.conf.hc_unhealthy_threshold)
-            except BotoServerError, msg:
-                logging.error(msg.message)
-                return None
-            return self.hc
+        try:
+            return self.elb.health_check
+        except BotoServerError, msg:
+            logging.error(msg.message)
+            return None
 
     def get_dns(self):
         ''' Return dns_name for ELB '''

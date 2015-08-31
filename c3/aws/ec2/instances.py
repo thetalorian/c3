@@ -19,6 +19,27 @@ from c3.utils import logging
 from boto.exception import EC2ResponseError
 
 
+def wait_for_instance(instance, desired_state="up", timeout=120, verbose=False):
+    ''' Waits for instance to enter desired state. '''
+    logging.debug('Instance: %s, Desired State: %s' %
+                  (instance.name, desired_state), verbose)
+    stt = time.time()
+    while time.time() - stt < timeout:
+        time.sleep(10)
+        state = instance.analyze_state(desired_state)
+        if state == 0:
+            logging.debug('Instance entered desired state: %s' %
+                          desired_state, verbose)
+            return True
+        elif state == 2:
+            logging.error('Instance failed to enter desired state: %s' %
+                          desired_state)
+            return False
+    logging.error(
+        'Waiting for %s timed out after %ds' % (instance.name, timeout))
+    return False
+
+
 class C3ClusterNotFoundException(Exception):
     ''' Cluster not found exception '''
     def __init__(self, value):
@@ -94,14 +115,17 @@ class C3Cluster(object):
                     logging.info(
                         'Waiting for %s (%s) to terminate' %
                         (iid.name, iid.inst_id))
-                    tcount = self.wait_cluster(desired_state='down')
-                    count += tcount
+                    if wait_for_instance(iid, desired_state='down',
+                                         verbose=self.verbose):
+                        count += 1
+            else:
+                logging.warn('%s already teriminated' % iid.name)
+                count += 1
         if count != len(self.c3instances):
             logging.warn(
                 'Asked for %d but only %d terminated' %
                 (len(self.c3instances), count))
         return count
-
 
     def hibernate(self):
         ''' Hibernate instances in cluster. '''
@@ -109,8 +133,9 @@ class C3Cluster(object):
         for iid in self.c3instances:
             if iid.hibernate():
                 logging.info('Waiting for %s to stop' % iid.name)
-                hcount = self.wait_cluster(desired_state='down')
-                count += hcount
+                if wait_for_instance(iid, desired_state='down',
+                                     verbose=self.verbose):
+                    count += 1
         if count != len(self.c3instances):
             logging.warn(
                 'Asked for %d but only %d stopped' %
@@ -123,36 +148,15 @@ class C3Cluster(object):
         for iid in self.c3instances:
             if iid.wake():
                 logging.info('Waiting for %s to start' % iid.name)
-                wcount = self.wait_cluster()
-                count += wcount
+                if wait_for_instance(iid, verbose=self.verbose):
+                    logging.debug('Wait for %s successful' %
+                                  iid.name, self.verbose)
+                    count += 1
         if count != len(self.c3instances):
             logging.warn(
                 'Asked for %d but only %d started' %
                 (len(self.c3instances), count))
         return count
-
-    def wait_cluster(self, desired_state="up", timeout=120):
-        ''' Waits for cluster to start. '''
-        stt = time.time()
-        while time.time() - stt < timeout:
-            time.sleep(10)
-            done = self.analyze_cluster(desired_state)
-            if done > 0:
-                return done
-        logging.error(
-            'wait_cluster() timed out after %ds' % (timeout))
-        return 0
-
-    def analyze_cluster(self, desired_state="up"):
-        ''' Analyze cluster state. '''
-        done = 0
-        for iid in self.c3instances:
-            state = iid.analyze_state(desired_state)
-            if state == 1:
-                return -1
-            elif state == 0:
-                done += 1
-        return done
 
 
 class C3Instance(object):
@@ -287,10 +291,12 @@ class C3Instance(object):
     def finalize_start(self):
         ''' Perform EC2 actions once the instance is finally 'running' '''
         logging.debug(
-            'In %s.finalize_start()' % self.inst_id, self.verbose)
+            'Finalize start: %s' % self.inst_id, self.verbose)
         if self.allocateeips:
             return self.new_eip()
         if self.reeip:
+            logging.debug('Reassociating EIP %s with instance %s' %
+                          (self.reeip, self.inst_id), self.verbose)
             try:
                 self.reeip.associate(self.inst_id)
                 self.reeip = None
@@ -316,12 +322,14 @@ class C3Instance(object):
         ''' Figure out if my nv hostname is an EIP '''
         mynv = self.nventory.get_node_by_instance_id(self.inst_id)[0]
         try:
-            myip = socket.gethostbyname(mynv['name'])
+            myip = socket.gethostbyname(mynv['ec2_public_hostname'])
         except socket.gaierror, msg:
             logging.error(msg)
             return None
         eip = self.get_eip_by_addr(myip)
         if eip:
+            logging.debug('EIP: %s associated with %s' % (eip, eip.instance_id),
+                          self.verbose)
             if steal or not eip.instance_id:
                 return eip
         return None
@@ -356,6 +364,7 @@ class C3Instance(object):
 
     def re_associate_eip(self, steal=False):
         ''' Reassociates an EIP address to an EC2 instance '''
+        logging.debug('Checking for EIP', self.verbose)
         eip = self.get_nv_eip(steal)
         if eip:
             logging.debug(
@@ -375,11 +384,11 @@ class C3Instance(object):
                 return None
             tries = 1
             while tries <= 10:
-                logging.debug(
-                    'EIP released on try %d' % tries,
-                    self.verbose)
                 try:
                     eip.release()
+                    logging.debug(
+                        'EIP released on try %d' % tries,
+                        self.verbose)
                     return True
                 except EC2ResponseError, msg:
                     logging.error(msg.message)
@@ -387,18 +396,22 @@ class C3Instance(object):
                 tries += 1
                 time.sleep(5)
             return False
-        return True
+        else:
+            logging.debug('No EIP to delete', self.verbose)
+            return True
 
     def destroy(self):
         ''' Teardown and terminate an EC2 Instance '''
         logging.debug(
             'Checking to see if we need to destory EIP', self.verbose)
         if self.destroy_eip():
+            logging.debug('Terminating %s' % self.name, self.verbose)
             try:
-                return self._instance.terminate()
+                self._instance.terminate()
             except EC2ResponseError, msg:
                 logging.error(msg.message)
                 return None
+            return True
         else:
             logging.error('Unable to destroy EIP, cancel terminating instance')
             return False
@@ -413,7 +426,7 @@ class C3Instance(object):
                 logging.error(msg.message)
                 return None
             logging.debug(
-                '%s.stop() (%s: %s)' %
+                'stopped (%s: %s) state: %s' %
                 (self.inst_id, name_tag, self.get_state()), self.verbose)
             return self.nv_set_state('hibernating')
         return False
@@ -422,6 +435,8 @@ class C3Instance(object):
         ''' Start an EC2 instance that is stopped '''
         if self.get_state() == 'stopped':
             name_tag = self._instance.tags.get('Name')
+            logging.debug('Attempt starting instance %s' %
+                          name_tag, self.verbose)
             self.re_associate_eip()
             try:
                 self._instance.start()
@@ -429,7 +444,7 @@ class C3Instance(object):
                 logging.error(msg.message)
                 return None
             logging.debug(
-                '%s.start() (%s: %s)' %
+                'Start succeeded (%s: %s) state: %s' %
                 (self.inst_id, name_tag, self.get_state()), self.verbose)
             return self.nv_set_state('inservice')
         return False
