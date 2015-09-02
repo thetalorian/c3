@@ -1,0 +1,9 @@
+# THIS IS cluster_defaults.ini-<account>
+# This should be used primarily to set the preferred AZs for this account
+# and possibly the Team cost tag
+[cluster]
+zone: us-east-1d,us-east-1c
+
+[tags]
+team: Citysearch
+

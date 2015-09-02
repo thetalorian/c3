@@ -30,12 +30,9 @@ def get_account_from_conf(conf=None):
     scp.read(conf)
     try:
         return scp.get('cluster', 'aws_account')
-    except ConfigParser.NoSectionError, msg:
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError), msg:
         logging.error(msg)
-        sys.exit(1)
-    except ConfigParser.NoOptionError, msg:
-        logging.error(msg)
-        sys.exit(1)
+        return None
 
 
 def get_hvm_instances():
@@ -60,7 +57,7 @@ def get_hvm_instances():
 
 def verify_az(avz):
     ''' Verify AZ via regex '''
-    if re.match(r"^\w\w-\w\wst-\d\w", avz):
+    if re.match(r"^\w+-\w+-\d\w$", avz):
         return True
     return False
 
@@ -72,7 +69,7 @@ class TooManyAMIsError(Exception):
         self.value = value
 
     def __str__(self):
-        return repr(self.value)
+        return self.value
 
 
 class AMINotFoundError(Exception):
@@ -82,7 +79,7 @@ class AMINotFoundError(Exception):
         self.value = value
 
     def __str__(self):
-        return repr(self.value)
+        return self.value
 
 
 class InvalidAZError(Exception):
@@ -301,7 +298,7 @@ class ClusterConfig(object):
         self.personal_defaults = os.getenv('HOME') + '/.cluster_defaults.ini'
         self.classfile = ini_file
         if not os.path.exists(ini_file):
-            raise ConfigNotFoundException("Can't find config: %s" % ini_file)
+            raise ConfigNotFoundException('Invalid config: %s' % ini_file)
         self.verbose = verbose
         self.account_name = account_name
         self.global_ssg = None
@@ -435,7 +432,10 @@ class ClusterConfig(object):
             logging.error(
                 'AMI statically set to %s. Please use nv graffiti values' % ami)
             return ami
-        amis = nventory.get_amis(self.get_cg_region(), ami)
+        try:
+            amis = nventory.get_amis(self.get_cg_region(), ami)
+        except:
+            raise AMINotFoundError("No AMI matching '%s' found" % ami)
         if amis is None:
             raise AMINotFoundError("No AMI matching '%s' found" % ami)
         if len(amis) == 1:
@@ -829,9 +829,3 @@ class ClusterConfig(object):
     def get_rds_config(self):
         ''' Returns dictonary of RDS config items. '''
         return self.rds.get_config()
-
-
-if __name__ == '__main__':
-    import doctest
-    TEST_INI = os.getenv('AWS_CONF_DIR') + '/devpro.ini'
-    doctest.testmod(extraglobs={'cc': ClusterConfig(TEST_INI, 'opsqa', True)})

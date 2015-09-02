@@ -17,11 +17,14 @@
 import os
 import sys
 import random
-import c3.utils.accounts as c3accounts
+import c3.utils.config
+import c3.utils.graphite
 import c3.utils.naming as c3naming
+import c3.utils.accounts as c3accounts
 import c3.utils.jgp.gen_entry as c3gen_entry
 import c3.utils.jgp.statement as c3statement
-import c3.utils.graphite
+from nose.tools import assert_equal
+from nose.tools import assert_raises
 
 
 def test_get_account_name():
@@ -42,7 +45,7 @@ def test_get_account_id():
     mapfile = os.getcwd() + '/tests/account_aliases_map.txt'
     account = c3accounts.get_account_id(
         account_name='opsprod', mapfile=mapfile)
-    assert account == None
+    assert account == '210987654321'
     os.environ['AWS_ACCOUNT_ID'] == '123456789012'
     account = c3accounts.get_account_id()
     assert account == '123456789012'
@@ -172,57 +175,145 @@ def test_jgp_do_condition():
     cond = c3statement.do_condition('1,2,3,4')
     assert cond == False
 
+def test_exception_invalid_config():
+    ''' Testing ConfigNotFoundException exception '''
+    config = os.getcwd() + '/tests/fake/devpro.ini'
+    with assert_raises(c3.utils.config.ConfigNotFoundException) as msg:
+        c3.utils.config.ClusterConfig(
+            ini_file=config, no_defaults=True)
+    assert_equal(msg.exception.value, 'Invalid config: %s' % config)
+
+def test_exception_get_azs():
+    ''' Test exception for get azs '''
+    config = os.getcwd() + '/tests/devpro.ini'
+    cconfig = c3.utils.config.ClusterConfig(
+        ini_file=config)
+    with assert_raises(c3.utils.config.InvalidAZError) as msg:
+        cconfig.set_azs('us-east-1aa')
+    assert_equal(msg.exception.value, "AZ 'us-east-1aa' is invalid")
+
 
 class TestConfig(object):
-    '''
-    >>> cc.getAMI()[:3]
-    'ami'
-    >>> cc.getAZs()
-    ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
-    >>> cc.getCount()
-    1
-    >>> cc.getSize()
-    't1.micro'
-    >>> cc.setAMI('ami-wil')
-    >>> cc.getAMI()
-    'ami-wil'
-    >>> cc.setSize('m7.huge')
-    >>> cc.getSize()
-    'm7.huge'
-    >>> cc.setCount(7)
-    >>> cc.getCount()
-    7
-    >>> cc.setAZs("us-east-1c,us-east-1b")
-    >>> cc.getAZs()
-    ['us-east-1c', 'us-east-1b']
-    >>> cc.getCountAZs()
-    2
-    >>> cc.setAZs("us-east-1c,us-east-1b,us-east-1b")
-    >>> cc.getCountAZs()
-    2
-    >>> cc.getDC()
-    'aws1'
-    >>> cc.getTagset() # doctest: +ELLIPSIS
-    {'BusinessUnit': 'CityGrid', 'Project': 'CloudTest', 'Component': 'pro ProvisionTestBox', 'Env': 'dev', 'Team': 'Operations'}
-    >>> cc.getLaunchTimeout()
-    180
-    >>> cc.getSleepStep()
-    10
-    >>> cc.getUserDataFile() # doctest: +ELLIPSIS
-    '/.../bin/userdata.pl'
-    >>> cc.getAdditionalSGs()
-    ['ssg-management']
-    >>> cc.add_sg("sg-other")
-    >>> cc.getAdditionalSGs()
-    ['ssg-management', 'sg-other']
-    >>> cc.getNodeGroups()
-    ['default_install', 'pro']
-    >>> cc.getAllocateEIPs()
-    False
-    >>> cc.setAllocateEIPs()
-    True
-    >>> cc.getAllocateEIPs()
-    True
-    >>> cc.getUseEBSOptimized()
-    False
-    '''
+    ''' testMatch class for c3.utils.config '''
+    def __init__(self):
+        mapfile = os.getcwd() + '/tests/account_aliases_map.txt'
+        os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests'
+        os.environ['HOME'] = os.getcwd() + '/tests'
+        self.config = os.getcwd() + '/tests/devpro.ini'
+        self.cconfig = c3.utils.config.ClusterConfig(
+            ini_file=self.config, account_name='opsqa')
+        self.config_func = c3.utils.config
+
+    def test_get_account_from_conf(self):
+        ''' Testing get account from conf function '''
+        account = self.config_func.get_account_from_conf(conf=self.config)
+        assert account == 'opsqa'
+        account = self.config_func.get_account_from_conf(conf='fake.ini')
+        assert account == None
+
+    def test_get_hvm_instances(self):
+        ''' Testing get hvm instances '''
+        instances = self.config_func.get_hvm_instances()
+        assert instances == [
+            'cc2.8xlarge',
+            'i2.xlarge',
+            'i2.2xlarge',
+            'i2.4xlarge',
+            'i2.8xlarge',
+            'r3.large',
+            'r3.xlarge',
+            'r3.2xlarge',
+            'r3.4xlarge',
+            'r3.8xlarge',
+            't2.micro',
+            't2.small',
+            't2.medium',
+        ]
+
+    def test_verify_az(self):
+        ''' Testing verify az function '''
+        assert self.config_func.verify_az('us-east-1a')
+        assert self.config_func.verify_az('us-east-1aa') == False
+
+    def test_get_azs(self):
+        ''' Testing get_ami method '''
+        azs = self.cconfig.get_azs()
+        assert azs == ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
+        self.cconfig.set_azs('us-east-1b,us-east-1c')
+        azs = self.cconfig.get_azs()
+        assert azs == ['us-east-1b', 'us-east-1c']
+
+    def test_get_count(self):
+        ''' Testing get_count method '''
+        assert self.cconfig.get_count() == 1
+        self.cconfig.set_count(7)
+        assert self.cconfig.get_count() == 7
+
+    def test_get_size(self):
+        ''' Testing get size '''
+        assert self.cconfig.get_size() == 't2.micro'
+        self.cconfig.set_size('m7.huge')
+        assert self.cconfig.get_size() == 'm7.huge'
+
+    def test_get_ami(self):
+        ''' Testing getting AMI '''
+        assert self.cconfig.get_ami() == 'ami_centos'
+        self.cconfig.set_ami('ami-wil') == 'ami-wil'
+        assert self.cconfig.get_ami() == 'ami-wil'
+
+    def test_get_count_azs(self):
+        ''' Testing getting count of AZs'''
+        self.cconfig.set_azs('us-east-1c,us-east-1b,us-east-1b')
+        assert self.cconfig.get_count_azs() == 2
+
+    def test_get_dc(self):
+        ''' Testing getting DC '''
+        assert self.cconfig.get_dc() == 'aws1'
+
+    def test_get_tagset(self):
+        ''' Testing get tagset '''
+        tagset = self.cconfig.get_tagset()
+        assert tagset == {
+            'BusinessUnit': 'CityGrid',
+            'Project': 'CloudTest',
+            'Component': 'pro ProvisionTestBox',
+            'Env': 'dev',
+            'Team': 'Operations'}
+
+    def test_get_launch_timeout(self):
+        ''' Testing get launch timeout '''
+        assert self.cconfig.get_launch_timeout() == 180
+
+    def test_get_sleep_step(self):
+        ''' Testing get sleep step '''
+        assert self.cconfig.get_sleep_step() == 10
+
+    def test_get_user_data_file(self):
+        ''' Testing get user data file '''
+        userdata = self.cconfig.get_user_data_file()
+        expected_file = os.getcwd() + '/tests/userdata.pl'
+        if userdata == expected_file:
+            pass
+        else:
+            assert False
+
+    def test_get_additional_sgs(self):
+        ''' Testing get additional SGs '''
+        assert self.cconfig.get_additional_sgs() == ['ssg-management']
+        self.cconfig.add_sg("sg-other")
+        sgs = self.cconfig.get_additional_sgs()
+        assert sgs == ['ssg-management', 'sg-other']
+
+    def test_get_node_groups(self):
+        ''' Testing get node groups '''
+        assert self.cconfig.get_node_groups() == ['default_install', 'pro']
+
+    def test_get_allocate_eips(self):
+        ''' Testing get allocate EIPs '''
+        assert self.cconfig.get_allocate_eips() == False
+        self.cconfig.set_allocate_eips()
+        assert self.cconfig.get_allocate_eips() == True
+
+    def test_get_use_ebs_optimized(self):
+        ''' Testing get use ebs optimized '''
+        assert self.cconfig.get_use_ebs_optimized() == False

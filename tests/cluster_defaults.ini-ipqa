@@ -1,0 +1,8 @@
+[cluster]
+zone: us-east-1a,us-east-1c
+
+[tags]
+team: InsiderPages
+
+[rds_securitygroup]
+rule1: Net:CGM-WestHollywood
