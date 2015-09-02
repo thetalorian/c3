@@ -30,7 +30,7 @@ from nose.tools import assert_raises
 def test_get_account_name():
     ''' Test function in c3accounts'''
     os.environ['AWS_ACCOUNT_ID'] = '123456789011'
-    mapfile = os.getcwd() + '/tests/account_aliases_map.txt'
+    mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
     account = c3accounts.get_account_name(mapfile=mapfile)
     assert account == None
     os.environ['AWS_ACCOUNT_ID'] = ''
@@ -42,7 +42,7 @@ def test_get_account_name():
 
 def test_get_account_id():
     ''' Test function in c3accounts'''
-    mapfile = os.getcwd() + '/tests/account_aliases_map.txt'
+    mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
     account = c3accounts.get_account_id(
         account_name='opsprod', mapfile=mapfile)
     assert account == '210987654321'
@@ -56,9 +56,9 @@ def test_get_account_id():
 
 def test_translate_account():
     ''' Test function in c3accounts'''
-    mapfile = os.getcwd() + '/tests/account_aliases_map_FAKE.txt'
+    mapfile = os.getcwd() + '/tests/confs/account_aliases_map_FAKE.txt'
     assert c3accounts.translate_account(mapfile=mapfile) == False
-    os.environ['AWS_CONF_DIR']= os.getcwd() + '/tests'
+    os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
     name = c3accounts.translate_account(account_id='123456789012')
     assert name == 'opsqa'
 
@@ -93,7 +93,7 @@ def test_get_aws_dc():
 
 def test_get_logging_bucket_name():
     ''' Test fuction in c3.utils.naming '''
-    os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests'
+    os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
     bucket = c3naming.get_logging_bucket_name(account_id='123456789012')
     assert bucket == 'cgs3log-opsqa'
     bucket = c3naming.get_logging_bucket_name(account_id='123456789011')
@@ -102,7 +102,7 @@ def test_get_logging_bucket_name():
 
 def test_get_cidr():
     ''' Test get_cidr function in c3.utils.naming '''
-    os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests'
+    os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
     cidr = c3naming.get_cidr('**PUBLIC**')
     assert cidr == '0.0.0.0/0'
 
@@ -111,7 +111,7 @@ def test_jgp_read_config():
     ''' Test read_config in c3.utils.jgp '''
     config = 'fake.ini'
     assert c3gen_entry.read_config(config) == False
-    config = os.getcwd() + '/tests/opsqa-devzzz.ini'
+    config = os.getcwd() + '/tests/confs/opsqa-devzzz.ini'
     ini = c3gen_entry.read_config(config)
     assert ini.sections() == ['s3:get*,s3:list*', 's3:*',
                               's3:putObject', 's3:badtest']
@@ -119,7 +119,7 @@ def test_jgp_read_config():
 
 def test_jgp_gen_s3_entry():
     ''' Test gen_s3_entry in c3.utils.jgp '''
-    config = os.getcwd() + '/tests/opsqa-devzzz.ini'
+    config = os.getcwd() + '/tests/confs/opsqa-devzzz.ini'
     ini = c3gen_entry.read_config(config)
     entry = c3gen_entry.gen_s3_entry(ini, 'devzzz', 'opsqa')
     assert entry == [
@@ -175,31 +175,44 @@ def test_jgp_do_condition():
     cond = c3statement.do_condition('1,2,3,4')
     assert cond == False
 
-def test_exception_invalid_config():
-    ''' Testing ConfigNotFoundException exception '''
-    config = os.getcwd() + '/tests/fake/devpro.ini'
-    with assert_raises(c3.utils.config.ConfigNotFoundException) as msg:
-        c3.utils.config.ClusterConfig(
-            ini_file=config, no_defaults=True)
-    assert_equal(msg.exception.value, 'Invalid config: %s' % config)
+class TestConfigExcpetions(object):
+    ''' Test class for c3.utils.config exceptions '''
+    def __init__(self):
+        self.fake_ini = os.getcwd() + '/tests/fake/devpro.ini'
+        self.bad_ini = os.getcwd() + '/tests/exceptions/devpro.ini'
+        self.good_ini = os.getcwd() + '/tests/confs/devpro.ini'
+        self.c3config = c3.utils.config
 
-def test_exception_get_azs():
-    ''' Test exception for get azs '''
-    config = os.getcwd() + '/tests/devpro.ini'
-    cconfig = c3.utils.config.ClusterConfig(
-        ini_file=config)
-    with assert_raises(c3.utils.config.InvalidAZError) as msg:
-        cconfig.set_azs('us-east-1aa')
-    assert_equal(msg.exception.value, "AZ 'us-east-1aa' is invalid")
+    def test_exception_invalid_config(self):
+        ''' Testing ConfigNotFoundException exception '''
+        with assert_raises(self.c3config.ConfigNotFoundException) as msg:
+            self.c3config.ClusterConfig(
+                ini_file=self.fake_ini, no_defaults=True)
+        assert_equal(msg.exception.value, 'Invalid config: %s' % self.fake_ini)
+
+    def test_exception_get_azs(self):
+        ''' Test exception for get azs '''
+        cconfig = self.c3config.ClusterConfig(
+            ini_file=self.good_ini)
+        with assert_raises(self.c3config.InvalidAZError) as msg:
+            cconfig.set_azs('us-east-1aa')
+        assert_equal(msg.exception.value, "AZ 'us-east-1aa' is invalid")
+
+    def test_exception_too_many_amis(self):
+        ''' Test exception for TooManyAMIsError '''
+        with assert_raises(self.c3config.TooManyAMIsError) as msg:
+            raise self.c3config.TooManyAMIsError('error')
+        assert_equal(msg.exception.value, 'error')
 
 
 class TestConfig(object):
     ''' testMatch class for c3.utils.config '''
     def __init__(self):
-        mapfile = os.getcwd() + '/tests/account_aliases_map.txt'
-        os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests'
-        os.environ['HOME'] = os.getcwd() + '/tests'
-        self.config = os.getcwd() + '/tests/devpro.ini'
+        mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
+        os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
+        os.environ['AWS_BASE_DIR'] = os.getcwd() + '/tests'
+        os.environ['HOME'] = os.getcwd() + '/tests/confs'
+        self.config = os.getcwd() + '/tests/confs/devpro.ini'
         self.cconfig = c3.utils.config.ClusterConfig(
             ini_file=self.config, account_name='opsqa')
         self.config_func = c3.utils.config
@@ -261,6 +274,12 @@ class TestConfig(object):
         self.cconfig.set_ami('ami-wil') == 'ami-wil'
         assert self.cconfig.get_ami() == 'ami-wil'
 
+    def test_get_resolved_ami(self):
+        ''' Test get resolved ami exception '''
+        with assert_raises(c3.utils.config.AMINotFoundError) as msg:
+            self.cconfig.get_resolved_ami(nventory=None)
+        assert_equal(msg.exception.value, "No AMI matching 'ami_centos' found")
+
     def test_get_count_azs(self):
         ''' Testing getting count of AZs'''
         self.cconfig.set_azs('us-east-1c,us-east-1b,us-east-1b')
@@ -291,7 +310,7 @@ class TestConfig(object):
     def test_get_user_data_file(self):
         ''' Testing get user data file '''
         userdata = self.cconfig.get_user_data_file()
-        expected_file = os.getcwd() + '/tests/userdata.pl'
+        expected_file = os.getcwd() + '/tests/bin/userdata.pl'
         if userdata == expected_file:
             pass
         else:
@@ -317,3 +336,21 @@ class TestConfig(object):
     def test_get_use_ebs_optimized(self):
         ''' Testing get use ebs optimized '''
         assert self.cconfig.get_use_ebs_optimized() == False
+
+    def test_get_ebs_config(self):
+        ''' Test get ebs config '''
+        volumes = self.cconfig.get_ebs_config()
+        assert volumes == [
+            {
+                'type': 'io1',
+                'device': '/dev/sdf',
+                'size': '500',
+                'iops': '1000'
+            },
+            {
+                'type': 'standard',
+                'device': '/dev/sdg',
+                'size': '50',
+                'iops': None
+            }
+        ]
