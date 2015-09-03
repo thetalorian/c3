@@ -1,8 +1,0 @@
-[cluster]
-zone: us-east-1b,us-east-1c
-
-[tags]
-team: BI
-
-[rds_securitygroup]
-rule1: Net:CGM-WestHollywood

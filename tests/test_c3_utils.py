@@ -216,6 +216,8 @@ class TestConfig(object):
         self.cconfig = c3.utils.config.ClusterConfig(
             ini_file=self.config, account_name='opsqa')
         self.config_func = c3.utils.config
+        self.solo_cconfig = c3.utils.config.ClusterConfig(
+            ini_file=self.config, account_name='opsqa', no_defaults=True)
 
     def test_get_account_from_conf(self):
         ''' Testing get account from conf function '''
@@ -251,7 +253,8 @@ class TestConfig(object):
     def test_get_azs(self):
         ''' Testing get_ami method '''
         azs = self.cconfig.get_azs()
-        assert azs == ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d']
+        assert azs == ['us-east-1a', 'us-east-1b', 'us-east-1c',
+                       'us-east-1d', 'us-east-1e']
         self.cconfig.set_azs('us-east-1b,us-east-1c')
         azs = self.cconfig.get_azs()
         assert azs == ['us-east-1b', 'us-east-1c']
@@ -285,10 +288,6 @@ class TestConfig(object):
         self.cconfig.set_azs('us-east-1c,us-east-1b,us-east-1b')
         assert self.cconfig.get_count_azs() == 2
 
-    def test_get_dc(self):
-        ''' Testing getting DC '''
-        assert self.cconfig.get_dc() == 'aws1'
-
     def test_get_tagset(self):
         ''' Testing get tagset '''
         tagset = self.cconfig.get_tagset()
@@ -299,15 +298,7 @@ class TestConfig(object):
             'Env': 'dev',
             'Team': 'Operations'}
 
-    def test_get_launch_timeout(self):
-        ''' Testing get launch timeout '''
-        assert self.cconfig.get_launch_timeout() == 180
-
-    def test_get_sleep_step(self):
-        ''' Testing get sleep step '''
-        assert self.cconfig.get_sleep_step() == 10
-
-    def test_get_user_data_file(self):
+    def test_get_user_data(self):
         ''' Testing get user data file '''
         userdata = self.cconfig.get_user_data_file()
         expected_file = os.getcwd() + '/tests/bin/userdata.pl'
@@ -315,6 +306,8 @@ class TestConfig(object):
             pass
         else:
             assert False
+        print >> sys.stdout, self.cconfig.get_user_data()
+        assert self.cconfig.get_user_data() == 'MOCK'
 
     def test_get_additional_sgs(self):
         ''' Testing get additional SGs '''
@@ -323,19 +316,11 @@ class TestConfig(object):
         sgs = self.cconfig.get_additional_sgs()
         assert sgs == ['ssg-management', 'sg-other']
 
-    def test_get_node_groups(self):
-        ''' Testing get node groups '''
-        assert self.cconfig.get_node_groups() == ['default_install', 'pro']
-
     def test_get_allocate_eips(self):
         ''' Testing get allocate EIPs '''
         assert self.cconfig.get_allocate_eips() == False
         self.cconfig.set_allocate_eips()
         assert self.cconfig.get_allocate_eips() == True
-
-    def test_get_use_ebs_optimized(self):
-        ''' Testing get use ebs optimized '''
-        assert self.cconfig.get_use_ebs_optimized() == False
 
     def test_get_ebs_config(self):
         ''' Test get ebs config '''
@@ -350,7 +335,88 @@ class TestConfig(object):
             {
                 'type': 'standard',
                 'device': '/dev/sdg',
-                'size': '50',
+                'size': '500',
                 'iops': None
             }
         ]
+        ebs = self.config_func.EBSConfig()
+        ebs.set_azs(['us-east-1a','us-east-1b'])
+        assert ebs.get_azs() == ['us-east-1a', 'us-east-1b']
+
+    def test_elb_config(self):
+        ''' Test elb config class '''
+        self.cconfig.elb.set_azs(['us-east-1a', 'us-east-1b'])
+        assert self.cconfig.elb.get_azs() == ['us-east-1a', 'us-east-1b']
+        assert self.cconfig.elb.validate() == True
+        self.cconfig.elb.protocol = None
+        assert self.cconfig.elb.validate() == False
+        self.cconfig.elb.enabled = False
+        assert self.cconfig.elb.validate() == False
+
+    def test_sg_config(self):
+        ''' Test sg config class '''
+        cidrs = self.cconfig.sgrp.get_cidr()
+        sgs = self.cconfig.sgrp.get_sg()
+        assert cidrs == [
+            {'cidr': '99.119.252.62/32', 'fport': 22,
+             'lport': 22, 'proto': 'tcp'},
+            {'cidr': '0.0.0.0/0', 'fport': -1,
+             'lport': -1, 'proto': 'icmp'}]
+        assert sgs == [
+            {'fport': 22, 'lport': 22, 'owner': '123456789012',
+             'proto': 'tcp', 'sg': 'devjmp'},
+            {'fport': 22, 'lport': 22, 'owner': '210987654321',
+             'proto': 'tcp', 'sg': 'prdjmp'},
+            {'fport': 80, 'lport': 80, 'owner': 'amazon-elb',
+             'proto': 'tcp', 'sg': 'amazon-elb-sg'}]
+
+    def test_rds_sg_config(self):
+        ''' Test RDS SG config class '''
+        cidrs = self.cconfig.rds_sg.get_cidr()
+        sgs = self.cconfig.rds_sg.get_sg()
+        assert cidrs == [
+            {'cidr': '111.111.111.39/27'}, {'cidr': '111.111.112.39/27'}]
+        assert sgs == [
+            {'oid': '210987654321', 'sid': 'prdjmp'}]
+
+    def test_rds_pg_config(self):
+        ''' Test RDS PG config class '''
+        params = self.cconfig.rds_pg.get_parameters()
+        assert params == [
+            ('skip_name_resolve', '1', 'pending-reboot'),
+            ('max_connect_errors', '999999999', 'immediate')]
+
+    def test_rds_instance_config(self):
+        ''' Test RDS instance config '''
+        data = self.cconfig.rds.get_config()
+        assert data == {
+            'allocated_storage': '100', 'auto_minor_version_upgrade': 'True',
+            'aws_base_dir': os.getenv('AWS_BASE_DIR'),
+            'aws_conf_dir': os.getenv('AWS_CONF_DIR'),
+            'backup_retention_period': '3', 'engine': 'mysql',
+            'engine_version': '5.6.23', 'iops': None,
+            'master_username': 'awsroot', 'multi_az': None,
+            'preferred_backup_window': '00:00-05:00',
+            'preferred_maintenance_window': 'sat:18:00-sat:22:00',
+            'publicly_accessible': 'True'}
+
+    def test_config_gets(self):
+        ''' Test Cluster Config gets '''
+        assert self.cconfig.get_primary_sg() == 'devpro'
+        assert self.cconfig.get_global_ssg() == 'ssg-management'
+        assert self.cconfig.get_aws_region() == 'us-east-1'
+        assert self.cconfig.get_cg_region() == 'aws1'
+        url = self.cconfig.get_whitelist_url()
+        assert url == 'https://sqs.aws.com/210987654321/puppetmaster-whitelist'
+        assert self.cconfig.raid.get_level() == '0'
+        assert self.cconfig.raid.get_device() == 'EBS'
+        assert self.cconfig.get_use_ebs_optimized() == False
+        assert self.cconfig.get_node_groups() == ['default_install', 'pro']
+        assert self.cconfig.get_sleep_step() == 10
+        assert self.cconfig.get_launch_timeout() == 180
+        assert self.cconfig.get_dc() == 'aws1'
+        assert self.cconfig.get_count_azs() == 5
+        assert self.cconfig.get_next_az() == 'us-east-1a'
+        assert self.cconfig.get_sleep_step() == 10
+        assert self.cconfig.get_additional_sgs() == ['ssg-management']
+        assert self.cconfig.get_sgs() == ['ssg-management', 'devpro']

@@ -548,12 +548,13 @@ class ClusterConfig(object):
                 self.user_data_raw = udfile.read()
                 udfile.close()
         udata = self.user_data_raw
-        for key in replacements.keys():
-            logging.debug(
-                'Replacing %s with %s in %s' %
-                (key, replacements[key], path), self.verbose)
-            udata = udata.replace(key, replacements[key])
-        return udata
+        if replacements:
+            for key in replacements.keys():
+                logging.debug(
+                    'Replacing %s with %s in %s' %
+                    (key, replacements[key], path), self.verbose)
+                udata = udata.replace(key, replacements[key])
+        return udata.strip()
 
     def get_tagset(self):
         ''' Return the tagset cost tags '''
@@ -579,7 +580,7 @@ class ClusterConfig(object):
         return self.get_ini("cluster", "launch_timeout", int)
 
     def get_sleep_step(self):
-        ''' Return sleep step '''
+        ''' R eturn sleep step '''
         return self.get_ini("cluster", "sleep_step", int)
 
     def add_sg(self, sgp):

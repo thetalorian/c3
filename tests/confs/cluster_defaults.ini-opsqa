@@ -1,11 +1,7 @@
-# THIS IS cluster_defaults.ini-<account>
-# This should be used primarily to set the preferred AZs for this account
-# and possibly the Team cost tag
 [cluster]
-#zone: us-east-1c,us-east-1d
 
 [tags]
 team: Operations
 
 [rds_securitygroup]
-opsqa_rule1: Net:CGM-WestHollywood
+opsqa_rule1: Net:NAT2
