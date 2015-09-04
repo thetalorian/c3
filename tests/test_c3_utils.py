@@ -204,8 +204,17 @@ class TestConfigExcpetions(object):
             raise self.c3config.TooManyAMIsError('error')
         assert_equal(msg.exception.value, 'error')
 
+    def test_exception_get_resolved_ami(self):
+        ''' Test get resolved ami exception '''
+        cconfig = self.c3config.ClusterConfig(
+            ini_file=self.good_ini)
+        with assert_raises(self.c3config.AMINotFoundError) as msg:
+            cconfig.get_resolved_ami(nventory=None)
+        assert_equal(msg.exception.value,
+                     "No AMI matching 'ami_hvm_centos' found")
 
-class TestConfig(object):
+
+class TestEC2Config(object):
     ''' testMatch class for c3.utils.config '''
     def __init__(self):
         mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
@@ -245,16 +254,17 @@ class TestConfig(object):
             't2.medium',
         ]
 
-    def test_verify_az(self):
-        ''' Testing verify az function '''
+    def test_azs(self):
+        ''' Test Availability Zone functions '''
         assert self.config_func.verify_az('us-east-1a')
         assert self.config_func.verify_az('us-east-1aa') == False
-
-    def test_get_azs(self):
-        ''' Testing get_ami method '''
         azs = self.cconfig.get_azs()
         assert azs == ['us-east-1a', 'us-east-1b', 'us-east-1c',
                        'us-east-1d', 'us-east-1e']
+        assert self.cconfig.get_next_az() == 'us-east-1a'
+        assert self.cconfig.get_count_azs() == 5
+        assert self.cconfig.limit_azs(2) == 3
+        assert self.cconfig.limit_azs(0) == 0
         self.cconfig.set_azs('us-east-1b,us-east-1c')
         azs = self.cconfig.get_azs()
         assert azs == ['us-east-1b', 'us-east-1c']
@@ -273,15 +283,11 @@ class TestConfig(object):
 
     def test_get_ami(self):
         ''' Testing getting AMI '''
-        assert self.cconfig.get_ami() == 'ami_centos'
+        assert self.cconfig.get_ami() == 'ami_hvm_centos'
+        self.cconfig.set_size('m3.medium')
+        assert self.cconfig.get_ami() == 'ami_paravirtual_centos'
         self.cconfig.set_ami('ami-wil') == 'ami-wil'
         assert self.cconfig.get_ami() == 'ami-wil'
-
-    def test_get_resolved_ami(self):
-        ''' Test get resolved ami exception '''
-        with assert_raises(c3.utils.config.AMINotFoundError) as msg:
-            self.cconfig.get_resolved_ami(nventory=None)
-        assert_equal(msg.exception.value, "No AMI matching 'ami_centos' found")
 
     def test_get_count_azs(self):
         ''' Testing getting count of AZs'''
@@ -370,10 +376,54 @@ class TestConfig(object):
             {'fport': 80, 'lport': 80, 'owner': 'amazon-elb',
              'proto': 'tcp', 'sg': 'amazon-elb-sg'}]
 
+    def test_config_gets(self):
+        ''' Test Cluster Config gets '''
+        assert self.cconfig.get_primary_sg() == 'devpro'
+        assert self.cconfig.get_global_ssg() == 'ssg-management'
+        assert self.cconfig.get_aws_region() == 'us-east-1'
+        assert self.cconfig.get_cg_region() == 'aws1'
+        url = self.cconfig.get_whitelist_url()
+        assert url == 'https://sqs.aws.com/210987654321/puppetmaster-whitelist'
+        self.cconfig.overrides['whitelisturl'] = 'http:://override'
+        url = self.cconfig.get_whitelist_url()
+        assert url == 'http:://override'
+        self.cconfig.set_ami('ami-12345')
+        assert self.cconfig.get_resolved_ami(nventory=None) == 'ami-12345'
+        assert self.cconfig.raid.get_level() == '0'
+        assert self.cconfig.raid.get_device() == 'EBS'
+        assert self.cconfig.get_use_ebs_optimized() == False
+        assert self.cconfig.get_node_groups() == ['default_install', 'pro']
+        assert self.cconfig.get_sleep_step() == 10
+        assert self.cconfig.get_launch_timeout() == 180
+        assert self.cconfig.get_dc() == 'aws1'
+        assert self.cconfig.get_sleep_step() == 10
+        assert self.cconfig.get_additional_sgs() == ['ssg-management']
+        assert self.cconfig.get_sgs() == ['ssg-management', 'devpro']
+        self.cconfig.set_ssh_key('user.pem')
+        assert self.cconfig.get_ssh_key() == 'user.pem'
+        assert self.cconfig.get_fs_type() == 'ext4'
+        assert self.cconfig.get_elb_name() == 'aws1dvippro1'
+
+
+class TestRDSConfig(object):
+    ''' testMatch class RDS Cluster Config '''
+    def __init__(self):
+        mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
+        os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
+        os.environ['AWS_BASE_DIR'] = os.getcwd() + '/tests'
+        os.environ['HOME'] = os.getcwd() + '/tests/confs'
+        self.config = os.getcwd() + '/tests/confs/devpro.ini'
+        self.cconfig = c3.utils.config.ClusterConfig(
+            ini_file=self.config, account_name='opsqa', prv_type='rds')
+        self.config_func = c3.utils.config
+        self.solo_cconfig = c3.utils.config.ClusterConfig(
+            ini_file=self.config, account_name='opsqa',
+            prv_type='rds', no_defaults=True)
+
     def test_rds_sg_config(self):
         ''' Test RDS SG config class '''
-        cidrs = self.cconfig.rds_sg.get_cidr()
-        sgs = self.cconfig.rds_sg.get_sg()
+        cidrs = self.cconfig.get_rds_cidr_rules()
+        sgs = self.cconfig.get_rds_sg_rules()
         assert cidrs == [
             {'cidr': '111.111.111.39/27'}, {'cidr': '111.111.112.39/27'}]
         assert sgs == [
@@ -399,24 +449,3 @@ class TestConfig(object):
             'preferred_backup_window': '00:00-05:00',
             'preferred_maintenance_window': 'sat:18:00-sat:22:00',
             'publicly_accessible': 'True'}
-
-    def test_config_gets(self):
-        ''' Test Cluster Config gets '''
-        assert self.cconfig.get_primary_sg() == 'devpro'
-        assert self.cconfig.get_global_ssg() == 'ssg-management'
-        assert self.cconfig.get_aws_region() == 'us-east-1'
-        assert self.cconfig.get_cg_region() == 'aws1'
-        url = self.cconfig.get_whitelist_url()
-        assert url == 'https://sqs.aws.com/210987654321/puppetmaster-whitelist'
-        assert self.cconfig.raid.get_level() == '0'
-        assert self.cconfig.raid.get_device() == 'EBS'
-        assert self.cconfig.get_use_ebs_optimized() == False
-        assert self.cconfig.get_node_groups() == ['default_install', 'pro']
-        assert self.cconfig.get_sleep_step() == 10
-        assert self.cconfig.get_launch_timeout() == 180
-        assert self.cconfig.get_dc() == 'aws1'
-        assert self.cconfig.get_count_azs() == 5
-        assert self.cconfig.get_next_az() == 'us-east-1a'
-        assert self.cconfig.get_sleep_step() == 10
-        assert self.cconfig.get_additional_sgs() == ['ssg-management']
-        assert self.cconfig.get_sgs() == ['ssg-management', 'devpro']

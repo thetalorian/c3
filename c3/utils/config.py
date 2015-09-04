@@ -290,7 +290,7 @@ class ClusterConfig(object):
     """
     # pylint: disable=too-many-instance-attributes
     # Appropriate number of attributes for ClusterConfig
-    def __init__(self, ini_file=None, account_name=None,
+    def __init__(self, ini_file=None, account_name=None, prv_type='ec2',
                  verbose=False, no_defaults=False):
         self.no_defaults = no_defaults  # only read self.classfile if True
         self.defaults = os.getenv('AWS_CONF_DIR') + '/cluster_defaults.ini'
@@ -330,20 +330,26 @@ class ClusterConfig(object):
                  "%s-%s" % (self.defaults, self.account_name), self.classfile])
         self.get_meta_data()
         self.server_datacenter = self.get_cg_region()
-        if self.ini.has_section('ebs'):
-            self.read_ebs_config()
-        if self.ini.has_section('elb'):
-            self.read_elb_config()
-        if self.ini.has_section('securitygroup'):
-            self.read_sg_config()
-        if self.ini.has_section('raid'):
-            self.read_raid_config()
-        if self.ini.has_section('rds_provision'):
-            self.read_rds_config()
-        if self.ini.has_section('rds_securitygroup'):
-            self.read_rds_sg_config()
-        if self.ini.has_section('rds_parameters'):
-            self.read_rds_pg_config()
+        self.read_sections(prv_type)
+
+    def read_sections(self, prv_type):
+        ''' Read sections based on provisioning type '''
+        if prv_type == 'ec2':
+            if self.ini.has_section('ebs'):
+                self.read_ebs_config()
+            if self.ini.has_section('elb'):
+                self.read_elb_config()
+            if self.ini.has_section('securitygroup'):
+                self.read_sg_config()
+            if self.ini.has_section('raid'):
+                self.read_raid_config()
+        elif prv_type == 'rds':
+            if self.ini.has_section('rds_provision'):
+                self.read_rds_config()
+            if self.ini.has_section('rds_securitygroup'):
+                self.read_rds_sg_config()
+            if self.ini.has_section('rds_parameters'):
+                self.read_rds_pg_config()
 
     def get_meta_data(self):
         ''' Get metadata from classfile '''
@@ -364,7 +370,6 @@ class ClusterConfig(object):
         ''' Return the Global SG '''
         return self.global_ssg
 
-    # Why do we have two?
     def get_aws_region(self):
         ''' We work in only one region, so we can just take the first '''
         if self.get_azs()[0] == 'auto':
@@ -372,7 +377,6 @@ class ClusterConfig(object):
         else:
             return self.get_azs()[0][:-1]
 
-    # This is the other one...
     def get_cg_region(self):
         ''' Return region from c3.utils.naming.get_aws_dc '''
         return c3.utils.naming.get_aws_dc(self.get_aws_region())
@@ -441,7 +445,8 @@ class ClusterConfig(object):
         if len(amis) == 1:
             newami = amis.values()[0]
             self.set_ami(newami)
-            logging.debug("Converted '%s' to '%s'" % (ami, newami), self.verbose)
+            logging.debug(
+                "Converted '%s' to '%s'" % (ami, newami), self.verbose)
             return newami
         elif len(amis) > 1:
             raise TooManyAMIsError("%s matches too many AMIs: %s" % (ami, amis))
@@ -481,13 +486,9 @@ class ClusterConfig(object):
         ''' We'll need them in a list to do this, stick in overrides '''
         if 'azs' not in self.overrides:
             self.overrides['azs'] = self.get_azs()
-        try:
-            avz = self.overrides['azs'].pop(0)
-            self.overrides['azs'].append(avz)
-            return avz
-        except IndexError, msg:
-            logging.error(msg)
-            return None
+        avz = self.overrides['azs'].pop(0)
+        self.overrides['azs'].append(avz)
+        return avz
 
     def get_count_azs(self):
         ''' Get the count of unique AZs '''
@@ -702,11 +703,7 @@ class ClusterConfig(object):
         return self.elb
 
     def get_elb_name(self):
-        ''' Return the name of the ELB, based on cluster and ELB configs
-        >>> cc.read_elb_config()
-        >>> cc.get_elb_name()
-        'aws1dvippro1'
-        '''
+        ''' Return the name of the ELB, based on cluster and ELB configs '''
         return "%s%svip%s%d" % (
             self.get_cg_region(), self.server_env[:1],
             self.server_class, self.elb.vip_number)
@@ -762,7 +759,7 @@ class ClusterConfig(object):
 
     def read_raid_config(self):
         ''' Read in RAID config options '''
-        if self.get_ini("raid", "enabled", str) == "True":
+        if self.get_ini("raid", "enabled", str) == 'True':
             self.raid.enabled = True
         else:
             self.raid.enabled = False
@@ -805,7 +802,7 @@ class ClusterConfig(object):
         return self.rds_sg.get_sg()
 
     def get_rds_cidr_rules(self):
-        ''' Returns list of RDS SG rules. '''
+        ''' Returns list of RDS CIDR rules. '''
         return self.rds_sg.get_cidr()
 
     def read_rds_pg_config(self):
