@@ -16,6 +16,7 @@
 
 import os
 import sys
+import moto
 import random
 import c3.utils.config
 import c3.utils.graphite

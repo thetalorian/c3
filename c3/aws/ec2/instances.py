@@ -160,7 +160,7 @@ class C3Cluster(object):
 
 
 class C3Instance(object):
-    ''' Class that manages instance objects '''
+    ''' Class that  manages instance objects '''
     # pylint:disable=too-many-instance-attributes
     # Required for boto API
     def __init__(self, conn, inst_id=None, nventory=None, verbose=False):
@@ -182,7 +182,7 @@ class C3Instance(object):
             self.state = self._instance.state
 
     def start(self, ami, sshkey, sgs, user_data, hostname,
-              isize, zone, nodegroups, allocateeips, use_ebsoptimized):
+              isize, zone , nodegroups, allocateeips, use_ebsoptimized):
         ''' Starts an EC2 instance '''
         # pylint:disable=too-many-arguments
         # Required for boto API

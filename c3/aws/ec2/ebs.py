@@ -18,18 +18,6 @@ from c3.utils import logging
 from boto.exception import EC2ResponseError
 
 
-class InvalidAZException(Exception):
-    """ Class excpetion for invalid AZs """
-    def __init__(self, zone):
-        Exception.__init__(self, zone)
-        self.zone = zone
-
-    def __str__(self):
-        return repr("Unsupported AZ %s , please check configuration"
-                    " and try a different AZ" %
-                    self.zone)
-
-
 class C3EBS(object):
     """ This class is used to manage EBS """
     def __init__(self, conn):
@@ -38,39 +26,43 @@ class C3EBS(object):
     def create_volume(self, ebs_size, zone, ebs_type='standard', iops=None):
         """
         Create a volume within a given zone. Support for EBS IOPS is included
-        >>> size = '10'
-        >>> zone = 'us-east-1b'
-        >>> vol = cg.create_volume(size, zone)
-        >>> vol.size
-        10
-        >>> cg.delete_volume(vol.id)
         """
         vol = list()
         try:
-            vol = self.conn.create_volume(ebs_size,
-                                          zone,
-                                          snapshot=None,
-                                          volume_type=ebs_type,
-                                          iops=iops)
+            vol = self.conn.create_volume(
+                ebs_size,
+                zone,
+                snapshot=None,
+                volume_type=ebs_type,
+                iops=iops)
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
-        except:
-            raise InvalidAZException(zone)
         return vol
 
     def delete_volume(self, volid):
         """ Delete unnattached EBS volume """
         try:
             self.conn.delete_volume(volid)
+            return True
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
 
-    def attach_volume(self, vol, instance_id, ebs_device):
+    def attach_volume(self, vol_id, instance_id, ebs_device):
         """ Attach a volume to an instance that was created """
         try:
-            self.conn.attach_volume(vol, instance_id, ebs_device)
+            self.conn.attach_volume(vol_id, instance_id, ebs_device)
+            return True
+        except EC2ResponseError, msg:
+            logging.error(msg.message)
+            return None
+
+    def detach_volume(self, vol_id, instance_id, ebs_device):
+        """ Detach a volume to from an instance """
+        try:
+            self.conn.detach_volume(vol_id, instance_id, ebs_device)
+            return True
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
@@ -84,6 +76,7 @@ class C3EBS(object):
         try:
             self.conn.modify_instance_attribute(
                 instance_id, 'blockDeviceMapping', mvolume)
+            return True
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
@@ -96,31 +89,14 @@ class C3EBS(object):
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
-        while snap.status == 'pending':
-            logging.info('Current Status: %s' % snap.status)
-            logging.info('Snapshot percent complete: %s' % snap.update())
-            sleep(60)
-        logging.info('Snapshot complete %s: %s' % (snap.id, desc))
+        logging.info('Snapshot created %s: %s' % (snap.id, desc))
         return snap
 
     def delete_snapshot(self, snap_id):
         ''' Delete a snapshot '''
         logging.info('Deleting snapshot: %s' % snap_id)
         try:
-            result = self.conn.delete_snapshot(snap_id)
+            return self.conn.delete_snapshot(snap_id)
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
-        if result:
-            logging.info('Delete snapshot complete: %s' % snap_id)
-        else:
-            logging.warn('Snapshot complete failed: %s' % snap_id)
-
-
-if __name__ == '__main__':
-    import doctest
-    import boto.ec2.connection
-    doctest.testmod(
-        extraglobs={
-            'cg': C3EBS(boto.ec2.connect_to_region('us-east-1'))
-        })
