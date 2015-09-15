@@ -13,6 +13,7 @@
 #  limitations under the License.
 #
 ''' This module manages EC2 clusters and instance objects '''
+import sys
 import time
 import socket
 from c3.utils import logging
@@ -40,54 +41,42 @@ def wait_for_instance(instance, desired_state="up", timeout=120, verbose=False):
     return False
 
 
-class C3ClusterNotFoundException(Exception):
-    ''' Cluster not found exception '''
-    def __init__(self, value):
-        super(C3ClusterNotFoundException, self).__init__(value)
-        self.name = value
-
-    def __str__(self):
-        return repr("C3Cluster %s not found" % self.name)
-
-
-class TooManySGsException(Exception):
-    ''' Too many SGs exception '''
-    def __init__(self, value, sgs):
-        super(TooManySGsException, self).__init__(value)
-        super(TooManySGsException, self).__init__(sgs)
-        self.name = value
-        self.sgs = sgs
-
-    def __str__(self):
-        return repr("C3Cluster %s not found %s" % (self.name, self.sgs))
-
-
 class C3Cluster(object):
     ''' The cluster specifc to ct_env and ct_class. '''
-    def __init__(self, conn, name, nventory=None, verbose=None):
+    def __init__(self, conn, name=None, nventory=None, verbose=None):
         self.conn = conn
         self.name = name
         self.nventory = nventory
         self.verbose = verbose
         self.instances = list()
         self.c3instances = list()
-        self.get_instances()
+        if self.name is not None:
+            self.get_instances()
 
-    def get_instances(self):
+    def get_instances(self, instance_ids=None):
         ''' Get both instances and C3instances '''
-        try:
-            sgrps = self.conn.get_all_security_groups([self.name])
-            if len(sgrps) > 1:
-                raise TooManySGsException(self.name, sgrps)
-            if len(sgrps) < 1:
-                raise C3ClusterNotFoundException(self.name)
-            sgrp = sgrps[0]
-        except:
-            raise C3ClusterNotFoundException(self.name)
-        try:
-            self.instances = sgrp.instances()
-        except EC2ResponseError, msg:
-            logging.error(msg.message)
+        if instance_ids:
+            all_instances = None
+            instances = list()
+            try:
+                all_instances = self.conn.get_all_instances(
+                    instance_ids=instance_ids)
+            except EC2ResponseError, msg:
+                logging.error(msg.message)
+                return None
+            for instance in all_instances:
+                instances.append(instance.instances[0])
+            self.instances = instances
+        else:
+            try:
+                sgrp = self.conn.get_all_security_groups(self.name)[0]
+            except IndexError:
+                logging.error('No instances found: check name %s' % self.name)
+                return None
+            try:
+                self.instances = sgrp.instances()
+            except EC2ResponseError, msg:
+                logging.error(msg.message)
         # we should really use C3Instances for everything
         for inst in self.instances:
             self.c3instances.append(C3Instance(
@@ -182,7 +171,7 @@ class C3Instance(object):
             self.state = self._instance.state
 
     def start(self, ami, sshkey, sgs, user_data, hostname,
-              isize, zone , nodegroups, allocateeips, use_ebsoptimized):
+              isize,  zone , nodegroups, allocateeips, use_ebsoptimized):
         ''' Starts an EC2 instance '''
         # pylint:disable=too-many-arguments
         # Required for boto API
@@ -202,7 +191,7 @@ class C3Instance(object):
         self.name = hostname
         self.allocateeips = allocateeips
         safety = 10
-        while True and safety:
+        while safety:
             try:
                 self._instance.add_tag('Name', hostname)
                 break
@@ -210,26 +199,24 @@ class C3Instance(object):
                 logging.error(msg.message)
             safety -= 1
             time.sleep(1)
-        self.nv_register(self._instance.id, hostname)
-        if nodegroups:
-            self.nv_add_node_groups(self._instance.id, nodegroups)
+        if self.nventory:
+            self.nv_register(self._instance.id, hostname)
+            if nodegroups:
+                self.nv_add_node_groups(self._instance.id, nodegroups)
         self.start_time = time.time()
         return self._instance.id
 
     def nv_register(self, inst_id, hostname):
         ''' Try to register the new instance with nventory '''
-        if self.nventory:
-            return self.nventory.register_host(hostname, inst_id)
+        return self.nventory.register_host(hostname, inst_id)
 
     def nv_add_node_groups(self, inst_id, nodegroups):
         ''' Try to register the new instance with nventory '''
-        if self.nventory:
-            return self.nventory.add_node_groups(inst_id, nodegroups)
+        return self.nventory.add_node_groups(inst_id, nodegroups)
 
     def nv_set_state(self, status):
         ''' Set nVentory state for instance '''
-        if self.nventory:
-            return self.nventory.set_status(self.inst_id, status)
+        return self.nventory.set_status(self.inst_id, status)
 
     def get_id(self):
         ''' Return the EC2 Instance ID '''
@@ -239,9 +226,10 @@ class C3Instance(object):
         ''' Returns a list of non root ebs volumes attached to the instance. '''
         vols = dict()
         inst = self._instance
-        for block in inst.block_device_mapping:
-            if '/dev/sda1' not in block:
-                vols[block] = inst.block_device_mapping[block].volume_id
+        if inst.block_device_mapping:
+            for block in inst.block_device_mapping:
+                if '/dev/sda1' not in block:
+                    vols[block] = inst.block_device_mapping[block].volume_id
         return vols
 
     def get_ebs_optimized(self):
@@ -362,15 +350,18 @@ class C3Instance(object):
             logging.error(msg.message)
             return None
 
-    def re_associate_eip(self, steal=False):
+    def re_associate_eip(self, steal=False, eip=None):
         ''' Reassociates an EIP address to an EC2 instance '''
-        logging.debug('Checking for EIP', self.verbose)
-        eip = self.get_nv_eip(steal)
+        if self.nventory:
+            logging.debug('Checking for EIP', self.verbose)
+            eip = self.get_nv_eip(steal)
         if eip:
             logging.debug(
                 'Will re-associate EIP %s to %s' %
                 (eip.public_ip, self.inst_id), self.verbose)
             self.reeip = eip
+        else:
+            logging.info('No external data source is defined, skipping')
 
     def destroy_eip(self):
         ''' Destroy EIP address associated with an EC2 instance '''
@@ -428,8 +419,10 @@ class C3Instance(object):
             logging.debug(
                 'stopped (%s: %s) state: %s' %
                 (self.inst_id, name_tag, self.get_state()), self.verbose)
-            return self.nv_set_state('hibernating')
-        return False
+            if self.nventory:
+                return self.nv_set_state('hibernating')
+            else:
+                return True
 
     def wake(self):
         ''' Start an EC2 instance that is stopped '''
@@ -446,5 +439,7 @@ class C3Instance(object):
             logging.debug(
                 'Start succeeded (%s: %s) state: %s' %
                 (self.inst_id, name_tag, self.get_state()), self.verbose)
-            return self.nv_set_state('inservice')
-        return False
+            if self.nventory:
+                return self.nv_set_state('inservice')
+            else:
+                return True
