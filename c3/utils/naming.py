@@ -25,14 +25,14 @@ from c3.utils import logging
 
 
 def find_available_hostnames(group, count=1, account=None,
-                             region=None, domain=None, nventory=None):
+                             region=None, domain=None, node_db=None):
     '''
-    Return the first <count> appropriate hostnames not already in nventory
+    Return the first <count> appropriate hostnames not already in node_db
     '''
     retnodes = list()
     nodes = list()
-    if nventory is None:
-        nventory = Nventory(url='http://fakehost')
+    if node_db is None:
+        node_db = Nventory(url='http://fakehost')
     if account is None:
         return False
     data = {
@@ -41,7 +41,7 @@ def find_available_hostnames(group, count=1, account=None,
         'sclass': group[3:],
         'acct': account,
         'domain': domain}
-    node_data = nventory.get_nodes(data)
+    node_data = node_db.get_nodes(data)
     if node_data:
         for node in node_data:
             nodes.append(node['name'])

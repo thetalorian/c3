@@ -25,8 +25,6 @@ def get_account_name(account_id=None, mapfile=None):
     '''
     Returns the canonical name of the account passed in, or defaults to the
     account in the environment variable 'AWS_ACCOUNT_ID'
-    >>> get_account_name(535530826599)
-    'opsqa'
     '''
     if account_id is None:
         account_id = os.getenv('AWS_ACCOUNT_ID')

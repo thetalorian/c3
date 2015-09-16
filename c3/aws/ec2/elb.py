@@ -25,6 +25,7 @@ class C3ELB(object):
     # Appropriate number of arguments for an ELB
     def __init__(self, conn, name, conf, verbose=False, find_only=False):
         self.elb = None
+        self.created = False
         self.conn = conn
         self.name = name
         self.conf = conf
@@ -33,18 +34,22 @@ class C3ELB(object):
         self.find_only = find_only
         self.elb_listeners = [
             (conf.public_port, conf.private_port, conf.protocol)]
+        self.init_elb()
+
+    def init_elb(self):
+        ''' Initialize ELB, create if does not exist by default '''
         try:
             self.elb = self.conn.get_all_load_balancers(
                 load_balancer_names=[self.name])[0]
             logging.debug('Found existing ELB: %s' % self.name, self.verbose)
-        except BotoServerError, msg:
-            if self.find_only is False:
-                self.create_elb()
-                self.set_hc()
-                self.set_azs()
-            else:
-                logging.error(msg.message)
-                return None
+        except (IndexError, BotoServerError), msg:
+            if self.find_only:
+                logging.info('%s does not exist' % self.name)
+                return False
+        if self.elb is None:
+            self.create_elb()
+            self.set_hc()
+            self.set_azs()
 
     def add_instances(self, instances):
         ''' Add instances to ELB '''
@@ -125,10 +130,10 @@ class C3ELB(object):
         try:
             self.elb = self.conn.create_load_balancer(
                 self.name, self.azs_used, self.elb_listeners)
+            logging.info('Created %s: %s' % (self.name, self.elb))
+            self.created = True
         except BotoServerError, msg:
             logging.error(msg.message)
-            return None
-        logging.info('Created %s: %s' % (self.name, self.elb))
 
     def instance_configured(self, inst_id):
         ''' Check if instance is configured on ELB '''

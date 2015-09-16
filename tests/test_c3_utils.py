@@ -26,6 +26,7 @@ import c3.utils.jgp.gen_entry as c3gen_entry
 import c3.utils.jgp.statement as c3statement
 from nose.tools import assert_equal
 from nose.tools import assert_raises
+from c3.utils.graphite import Graphite
 
 
 def test_get_account_name():
@@ -210,7 +211,7 @@ class TestConfigExcpetions(object):
         cconfig = self.c3config.ClusterConfig(
             ini_file=self.good_ini)
         with assert_raises(self.c3config.AMINotFoundError) as msg:
-            cconfig.get_resolved_ami(nventory=None)
+            cconfig.get_resolved_ami(node_db=None)
         assert_equal(msg.exception.value,
                      "No AMI matching 'ami_hvm_centos' found")
 
@@ -389,7 +390,7 @@ class TestEC2Config(object):
         url = self.cconfig.get_whitelist_url()
         assert url == 'http:://override'
         self.cconfig.set_ami('ami-12345')
-        assert self.cconfig.get_resolved_ami(nventory=None) == 'ami-12345'
+        assert self.cconfig.get_resolved_ami(node_db=None) == 'ami-12345'
         assert self.cconfig.raid.get_level() == '0'
         assert self.cconfig.raid.get_device() == 'EBS'
         assert self.cconfig.get_use_ebs_optimized() == False
@@ -450,3 +451,27 @@ class TestRDSConfig(object):
             'preferred_backup_window': '00:00-05:00',
             'preferred_maintenance_window': 'sat:18:00-sat:22:00',
             'publicly_accessible': 'True'}
+
+class TestGraphite(object):
+    ''' testMatch class for c3.utils.graphite '''
+    def __init__(self):
+        self.graphite = Graphite(server='graphite.dev', debug=True)
+        self.name = 'test_metric'
+        self.value = 'test_value'
+        self.hostname = 'aws1devtst1.domain.com'
+
+    def test_send_metric(self):
+        ''' Test sending metrics '''
+        assert self.graphite.send_metric(self.name, self.value) == True
+        assert self.graphite.send_server_metric(
+            self.name, self.value, hostname=self.hostname) == True
+
+    def test_graphite_connect(self):
+        ''' Test graphite connection '''
+        self.graphite.connect()
+        assert self.graphite._sock_status == False
+
+    def test_get_server_prefix(self):
+        ''' Test get server prefix '''
+        self.graphite.get_server_prefix(hostname=self.hostname)
+        assert self.graphite.prefix == 'servers.tst.aws1devtst1_domain_com'

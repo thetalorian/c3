@@ -33,20 +33,12 @@ def make_statement(user_acct, user, path, action,
 
 
 def do_action(action):
-    """
-    Test 1
-    >>> do_action('s3:get*,s3:list*')
-    ['s3:get*', 's3:list*']
-
-    Test 2
-    >>> do_action('s3:GetBucketAcl')
-    ['s3:GetBucketAcl']
-    """
+    ''' Returns actions in JSON '''
     return action.split(',')
 
 
 def do_principal(user_account, user):
-    ''' Returnis prinipcal in JSON '''
+    ''' Returns prinipcal in JSON '''
     item = dict()
     if user_account == 'cidr-networks':
         item['AWS'] = '*'

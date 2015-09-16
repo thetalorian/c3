@@ -429,15 +429,15 @@ class ClusterConfig(object):
             return self.overrides['whitelisturl']
         return self.get_ini("cluster", "whitelisturl", str)
 
-    def get_resolved_ami(self, nventory):
+    def get_resolved_ami(self, node_db):
         ''' Return resolved AMI '''
         ami = self.get_ami()
         if ami[:4] == 'ami-':
             logging.error(
-                'AMI statically set to %s. Please use nv graffiti values' % ami)
+                'AMI statically set to %s. Please use graffiti values' % ami)
             return ami
         try:
-            amis = nventory.get_amis(self.get_cg_region(), ami)
+            amis = node_db.get_amis(self.get_cg_region(), ami)
         except:
             raise AMINotFoundError("No AMI matching '%s' found" % ami)
         if amis is None:

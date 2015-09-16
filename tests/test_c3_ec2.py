@@ -17,12 +17,15 @@
 import os
 import sys
 import moto
+import c3.utils.config
 from c3.aws.ec2 import ebs
+from c3.aws.ec2 import elb
 from zambi import ZambiConn
 from c3.aws.ec2 import instances
 from nose.tools import assert_equal
 from nose.tools import assert_raises
 from boto.exception import EC2ResponseError
+
 
 class TestC3Cluster(object):
     ''' testMatch class for C3Cluster '''
@@ -86,7 +89,7 @@ class TestC3Instance(object):
         self.ec2.start(
             'ami-12345', 'fake.pem', 'devtst', user_data,
             'aws1devtst1', 'm3.medium', 'us-east-1b',
-            'default_install', False, True)
+            'default_install', True, True)
 
     def test_wait_for_instance(self):
         ''' Test waiting for instance to fully start '''
@@ -112,6 +115,9 @@ class TestC3Instance(object):
         assert self.ec2.reeip.public_ip == eip.public_ip
         self.conn.associate_address(self.ec2.inst_id, eip.public_ip)
         self.ec2.destroy_eip()
+        eip = self.conn.allocate_address()
+        assert self.ec2.set_eip(eip.public_ip) == True
+
 
 class TestC3EBS(object):
     ''' test Match class for C3EBS '''
@@ -149,3 +155,31 @@ class TestC3EBS(object):
             'vol-12345', self.ec2mock.ec2.inst_id, '/dev/sdf') == None
         assert self.ebs.delete_volume(vol.id) == True
         assert self.ebs.delete_volume('vol-12345') == None
+
+
+class TestC3ELB(object):
+    ''' testMatch class for C3ELB '''
+    def __init__(self):
+        self.cconfig = self.get_test_config()
+        mock = moto.elb.mock_elb()
+        mock.start()
+        mapfile = os.getcwd() + '/tests/conf/account_aliases_map.txt'
+        cmgr = ZambiConn(mapfile=mapfile)
+        os.environ['AWS_CRED_DIR'] = os.getcwd() + '/tests'
+        self.conn = cmgr.get_connection('opsqa', service='elb')
+        self.elb = None
+
+    def get_test_config(self):
+        ''' Get the test config '''
+        mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
+        os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
+        os.environ['AWS_BASE_DIR'] = os.getcwd() + '/tests'
+        os.environ['HOME'] = os.getcwd() + '/tests/confs'
+        config = os.getcwd() + '/tests/confs/devpro.ini'
+        return c3.utils.config.ClusterConfig(
+            ini_file=config, account_name='opsqa')
+
+    def test_create_elb(self):
+        self.elb = elb.C3ELB(
+            self.conn, 'aws1dviptst1', self.cconfig.get_elb_config())
+        assert self.elb.created == True

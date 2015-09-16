@@ -43,10 +43,10 @@ def wait_for_instance(instance, desired_state="up", timeout=120, verbose=False):
 
 class C3Cluster(object):
     ''' The cluster specifc to ct_env and ct_class. '''
-    def __init__(self, conn, name=None, nventory=None, verbose=None):
+    def __init__(self, conn, name=None, node_db=None, verbose=None):
         self.conn = conn
         self.name = name
-        self.nventory = nventory
+        self.node_db = node_db
         self.verbose = verbose
         self.instances = list()
         self.c3instances = list()
@@ -81,7 +81,7 @@ class C3Cluster(object):
         for inst in self.instances:
             self.c3instances.append(C3Instance(
                 self.conn, inst_id=inst.id,
-                nventory=self.nventory, verbose=self.verbose))
+                node_db=self.node_db, verbose=self.verbose))
         return self.instances
 
     def get_instance_ids(self):
@@ -152,7 +152,7 @@ class C3Instance(object):
     ''' Class that  manages instance objects '''
     # pylint:disable=too-many-instance-attributes
     # Required for boto API
-    def __init__(self, conn, inst_id=None, nventory=None, verbose=False):
+    def __init__(self, conn, inst_id=None, node_db=None, verbose=False):
         self.conn = conn
         self.inst_id = inst_id
         self.verbose = verbose
@@ -160,7 +160,7 @@ class C3Instance(object):
         self._reservation = None
         self.start_time = None
         self.registered = False
-        self.nventory = nventory
+        self.node_db = node_db
         self.allocateeips = None
         self.state = None
         self.name = None
@@ -175,11 +175,11 @@ class C3Instance(object):
         ''' Starts an EC2 instance '''
         # pylint:disable=too-many-arguments
         # Required for boto API
+        logging.debug(
+            'C3Instance.start(%s, %s, %s, %s, %s, %s, %s, %s)' %
+            (ami, sshkey, sgs, len(user_data), hostname, isize, zone,
+             nodegroups), self.verbose)
         try:
-            logging.debug(
-                'C3Instance.start(%s, %s, %s, %s, %s, %s, %s, %s)' %
-                (ami, sshkey, sgs, len(user_data), hostname, isize, zone,
-                 nodegroups), self.verbose)
             self._reservation = self.conn.run_instances(
                 ami, 1, 1, sshkey, sgs, user_data, None, isize, zone,
                 None, None, False, None, None, ebs_optimized=use_ebsoptimized)
@@ -199,24 +199,24 @@ class C3Instance(object):
                 logging.error(msg.message)
             safety -= 1
             time.sleep(1)
-        if self.nventory:
-            self.nv_register(self._instance.id, hostname)
+        if self.node_db:
+            self.node_register(self._instance.id, hostname)
             if nodegroups:
-                self.nv_add_node_groups(self._instance.id, nodegroups)
+                self.add_node_groups(self._instance.id, nodegroups)
         self.start_time = time.time()
         return self._instance.id
 
-    def nv_register(self, inst_id, hostname):
-        ''' Try to register the new instance with nventory '''
-        return self.nventory.register_host(hostname, inst_id)
+    def node_register(self, inst_id, hostname):
+        ''' Try to register the new instance with node_db '''
+        return self.node_db.register_host(hostname, inst_id)
 
-    def nv_add_node_groups(self, inst_id, nodegroups):
-        ''' Try to register the new instance with nventory '''
-        return self.nventory.add_node_groups(inst_id, nodegroups)
+    def add_node_groups(self, inst_id, nodegroups):
+        ''' Try to register the new instance with node_db '''
+        return self.node_db.add_node_groups(inst_id, nodegroups)
 
-    def nv_set_state(self, status):
+    def set_state(self, status):
         ''' Set nVentory state for instance '''
-        return self.nventory.set_status(self.inst_id, status)
+        return self.node_db.set_status(self.inst_id, status)
 
     def get_id(self):
         ''' Return the EC2 Instance ID '''
@@ -306,11 +306,22 @@ class C3Instance(object):
                 return eip
         return None
 
-    def get_nv_eip(self, steal=False):
-        ''' Figure out if my nv hostname is an EIP '''
-        mynv = self.nventory.get_node_by_instance_id(self.inst_id)[0]
+    def set_eip(self, address):
+        ''' Set the EIP for the instance '''
         try:
-            myip = socket.gethostbyname(mynv['ec2_public_hostname'])
+            self.eip = self.get_eip_by_addr(address)
+            return True
+        except EC2ResponseError, msg:
+            logging.error(msg.message)
+            return None
+
+    def get_eip(self, steal=False):
+        ''' Figure out if my hostname is an EIP '''
+        if self.eip:
+            return self.eip
+        data = self.node_db.get_node_by_instance_id(self.inst_id)[0]
+        try:
+            myip = socket.gethostbyname(data['ec2_public_hostname'])
         except socket.gaierror, msg:
             logging.error(msg)
             return None
@@ -352,9 +363,9 @@ class C3Instance(object):
 
     def re_associate_eip(self, steal=False, eip=None):
         ''' Reassociates an EIP address to an EC2 instance '''
-        if self.nventory:
+        if self.node_db:
             logging.debug('Checking for EIP', self.verbose)
-            eip = self.get_nv_eip(steal)
+            eip = self.get_eip(steal)
         if eip:
             logging.debug(
                 'Will re-associate EIP %s to %s' %
@@ -419,8 +430,8 @@ class C3Instance(object):
             logging.debug(
                 'stopped (%s: %s) state: %s' %
                 (self.inst_id, name_tag, self.get_state()), self.verbose)
-            if self.nventory:
-                return self.nv_set_state('hibernating')
+            if self.node_db:
+                return self.set_state('hibernating')
             else:
                 return True
 
@@ -439,7 +450,7 @@ class C3Instance(object):
             logging.debug(
                 'Start succeeded (%s: %s) state: %s' %
                 (self.inst_id, name_tag, self.get_state()), self.verbose)
-            if self.nventory:
-                return self.nv_set_state('inservice')
+            if self.node_db:
+                return self.set_state('inservice')
             else:
                 return True

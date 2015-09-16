@@ -104,7 +104,7 @@ def parser_setup():
         type='string',
         dest='nv_ini',
         default="/app/secrets/nv_prd.ini",
-        help='nventory ini file to use; useful for testing')
+        help='External DB ini file to use; useful for testing')
     parser.add_option(
         '--destroy',
         '-D',
@@ -171,13 +171,13 @@ def check_timed_out(start_time, timeout, verbose=False):
 
 
 def nv_connect(nv_ini):
-    ''' Get a Nnventory connection object. '''
+    ''' Get a Nventory connection object. '''
     try:
-        nventory = Nventory(ini_file=nv_ini)
-        nventory.login()
+        node_db = Nventory(ini_file=nv_ini)
+        node_db.login()
     except Exception:
         raise
-    return nventory
+    return node_db
 
 
 def cluster_tagger(conn, verbose=None):
@@ -270,12 +270,12 @@ class C3EC2Provision(object):
 
     def cluster(self):
         ''' Gets an existing cluster object. '''
-        nventory = nv_connect(self.opts.nv_ini)
+        node_db = nv_connect(self.opts.nv_ini)
         self.conn = self.aws_conn('ec2')
         try:
             cgc = c3.aws.ec2.instances.C3Cluster(
                 self.conn, self.cconfig.get_primary_sg(),
-                nventory, verbose=self.opts.verbose)
+                node_db, verbose=self.opts.verbose)
         except c3.aws.ec2.instances.C3ClusterNotFoundException, msg:
             logging.error("Problem finding cluster (%s)" % (msg))
             sys.exit(1)
@@ -399,8 +399,8 @@ class C3EC2Provision(object):
                 "You're trying to start instances, "
                 "but don't have an SSH key set")
             sys.exit(1)
-        nventory = nv_connect(self.opts.nv_ini)
-        if not self.cconfig.get_resolved_ami(nventory):
+        node_db = nv_connect(self.opts.nv_ini)
+        if not self.cconfig.get_resolved_ami(node_db):
             logging.error('Getting AMI failed, exiting')
             sys.exit(1)
 
@@ -449,7 +449,7 @@ class C3EC2Provision(object):
     def cluster_create(self):
         ''' Provisions a new cluster based on a config. '''
         self.conn = self.aws_conn('ec2')
-        nventory = nv_connect(self.opts.nv_ini)
+        node_db = nv_connect(self.opts.nv_ini)
         success = 0
         failed = 0
         self.check_config_types()
@@ -465,14 +465,14 @@ class C3EC2Provision(object):
             self.hostnames = c3.utils.naming.find_available_hostnames(
                 self.cconfig.get_primary_sg(), self.cconfig.get_count(),
                 self.cconfig.get_aws_account(),
-                self.cconfig.get_aws_region(), 'ctgrd.com', nventory)
+                self.cconfig.get_aws_region(), 'ctgrd.com', node_db)
             start_time = time.time()
             logging.debug(
                 'Creating new servers: %s' % self.hostnames,
                 self.opts.verbose)
             for host in self.hostnames:
                 servers[host] = C3Instance(
-                    conn=self.conn, nventory=nventory,
+                    conn=self.conn, node_db=node_db,
                     verbose=self.opts.verbose)
                 userdata = self.cconfig.get_user_data(
                     self.userdata_replacements(host))

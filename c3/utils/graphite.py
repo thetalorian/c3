@@ -22,17 +22,18 @@ from c3.utils import logging
 
 class Graphite(object):
     ''' This class sends metrics to graphite. '''
-    def __init__(self, server='dev.relay-aws.graphite.ctgrd.com', port=2003):
+    def __init__(self, server=None, port=2003, debug=False):
         self.server = server
         self.port = port
         self._sock = None
         self._sock_status = None
         self.prefix = None
+        self.debug = debug
 
-    def send_metric(self, name, value, debug=False):
+    def send_metric(self, name, value):
         ''' Send custom path metric to graphite. '''
         message = "%s %s %s"  % (name, value, int(time.time()))
-        if debug:
+        if self.debug:
             logging.info(message)
             return True
         if not self._sock:
@@ -46,9 +47,13 @@ class Graphite(object):
                 self._sock = None
                 return False
 
-    def send_server_metric(self, name, value):
+    def send_server_metric(self, name, value, hostname=None):
         ''' Send server path metric to graphite. '''
-        return self.send_metric(self.get_server_prefix() + "." + name, value)
+        message = '%s.%s%s' % (self.get_server_prefix(hostname), name, value)
+        if self.debug:
+            logging.info(message)
+            return True
+        return self.send_metric(message)
 
     def connect(self):
         ''' Create socket connection to graphite. '''
@@ -60,11 +65,12 @@ class Graphite(object):
             self._sock_status = False
             logging.error(msg)
 
-    def get_server_prefix(self):
+    def get_server_prefix(self, hostname=None):
         ''' Get FQDN for server metric path. '''
-        if self.prefix:
-            return self.prefix
-        hostname = socket.getfqdn()
+        if hostname is None:
+            if self.prefix:
+                return self.prefix
+            hostname = socket.getfqdn()
         fqdn = re.sub(r'\.', '_', hostname)
         ct_class = fqdn[7:10]
         self.prefix = "servers.%s.%s" % (ct_class, fqdn)
