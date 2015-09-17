@@ -24,6 +24,7 @@ from zambi import ZambiConn
 from c3.aws.ec2 import instances
 from nose.tools import assert_equal
 from nose.tools import assert_raises
+from c3.aws.ec2 import security_groups
 from boto.exception import EC2ResponseError
 
 
@@ -180,6 +181,36 @@ class TestC3ELB(object):
             ini_file=config, account_name='opsqa')
 
     def test_create_elb(self):
+        ''' Test create ELB '''
         self.elb = elb.C3ELB(
             self.conn, 'aws1dviptst1', self.cconfig.get_elb_config())
         assert self.elb.created == True
+
+class TestC3SecurityGroups(object):
+    ''' testMatch class for C3SecurityGroups '''
+    def __init__(self):
+        mock = moto.ec2.mock_ec2()
+        mock.start()
+        mapfile = os.getcwd() + '/tests/conf/account_aliases_map.txt'
+        cmgr = ZambiConn(mapfile=mapfile)
+        os.environ['AWS_CRED_DIR'] = os.getcwd() + '/tests'
+        self.conn = cmgr.get_connection('opsqa')
+        self.sgrp = None
+
+    def test_create_sg(self):
+        ''' Test Create Security Group '''
+        self.sgrp = security_groups.SecurityGroups(self.conn, 'devtst')
+        assert self.sgrp.sgrp.name == 'devtst'
+
+    def test_add_ingress(self):
+        ''' Test add SG ingress rule '''
+        self.sgrp = security_groups.SecurityGroups(self.conn, 'devtst')
+        assert self.sgrp.add_ingress(
+            ['80','80'], 'tcp', src_cidr='111.111.111.111/32') == True
+        assert self.sgrp.add_ingress(
+            ['80', '80'], 'tcp', src_acct='opsqa', src_sg='default') == True
+
+    def test_destroy_sg(self):
+        ''' Test destroy SG '''
+        self.sgrp = security_groups.SecurityGroups(self.conn, 'devtst')
+        assert self.sgrp.destroy() == True

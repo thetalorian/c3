@@ -18,26 +18,6 @@ from boto.exception import EC2ResponseError
 from c3.utils import logging
 
 
-class SGNotFoundException(Exception):
-    ''' Returns Exception when a Security Group is not found '''
-    def __init__(self, value):
-        super(SGNotFoundException, self).__init__(value)
-        self.value = value
-
-    def __str__(self):
-        return repr("SG %s not found" % self.value)
-
-
-class SGFailedDeleteException(Exception):
-    ''' Returns Exception when a Security Group failed to delete '''
-    def __init__(self, value):
-        super(SGFailedDeleteException, self).__init__(value)
-        self.name = value
-
-    def __str__(self):
-        return repr("SG %s could not be deleted" % self.name)
-
-
 class SecurityGroups(object):
     ''' Class to manage Security Groups '''
     def __init__(self, conn, name, find_only=False, verbose=False):
@@ -48,7 +28,7 @@ class SecurityGroups(object):
         self.verbose = verbose
         try:
             self.sgrp = conn.get_all_security_groups(name)[0]
-        except EC2ResponseError, msg:
+        except (IndexError, EC2ResponseError), msg:
             if not self.find_only:
                 logging.info('Creating SG %s' % self.name)
                 self.sgrp = self.create()
@@ -113,4 +93,4 @@ class SecurityGroups(object):
                     (self.name, stime))
                 sleep(stime)
                 timeout -= stime
-        raise SGFailedDeleteException(self.name)
+        logging.error('SG %s could not be deleted')
