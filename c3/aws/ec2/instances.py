@@ -13,7 +13,6 @@
 #  limitations under the License.
 #
 ''' This module manages EC2 clusters and instance objects '''
-import sys
 import time
 import socket
 from c3.utils import logging
@@ -172,7 +171,7 @@ class C3Instance(object):
             self.state = self._instance.state
 
     def start(self, ami, sshkey, sgs, user_data, hostname,
-              isize,  zone , nodegroups, allocateeips, use_ebsoptimized):
+              isize, zone, nodegroups, allocateeips, use_ebsoptimized):
         ''' Starts an EC2 instance '''
         # pylint:disable=too-many-arguments
         # Required for boto API
@@ -248,6 +247,7 @@ class C3Instance(object):
 
     def analyze_state(self, desired_state='up'):
         ''' Find out if we're done (0), waiting (1), or screwed (2) '''
+        result = None
         state = self.get_state()
         if state:
             logging.debug(

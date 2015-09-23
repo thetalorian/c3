@@ -274,8 +274,8 @@ class C3EC2Provision(object):
         self.conn = self.aws_conn('ec2')
         try:
             cgc = c3.aws.ec2.instances.C3Cluster(
-                self.conn, self.cconfig.get_primary_sg(),
-                node_db, verbose=self.opts.verbose)
+                self.conn, name=self.cconfig.get_primary_sg(),
+                node_db=node_db, verbose=self.opts.verbose)
         except c3.aws.ec2.instances.C3ClusterNotFoundException, msg:
             logging.error("Problem finding cluster (%s)" % (msg))
             sys.exit(1)
