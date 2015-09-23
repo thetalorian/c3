@@ -14,7 +14,7 @@ requires = [
     ]
 
 setup(name='C3',
-      version='1.0.0',
+      version='0.1',
       description='CloudCloudCloud',
       long_description=README + '\n\n' + CHANGELOG,
       classifiers=[

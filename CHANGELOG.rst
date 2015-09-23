@@ -1,9 +1,9 @@
 Changelog
 =========
-Next Release (TBD)
+Next Release (0.2)
 ------------------
 * C3: CloudCloudCloud Manages automation of AWS accounts and services.
 
-1.0
+0.1
 ~~~~~~~
-* feature: Initial revision
+* feature: initial public release, EC2 provisioning
