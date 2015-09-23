@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python2.7
 ''' Used to manage provision of EC2 servers and services. '''
 
 import sys
