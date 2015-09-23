@@ -165,6 +165,7 @@ class C3Instance(object):
         self.state = None
         self.name = None
         self.reeip = None
+        self.eip = None
         if inst_id:
             self._instance = conn.get_all_instances([inst_id])[0].instances[0]
             self.name = self._instance.tags.get("Name") or self.inst_id
