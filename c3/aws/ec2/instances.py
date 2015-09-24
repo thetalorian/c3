@@ -326,6 +326,7 @@ class C3Instance(object):
         except socket.gaierror, msg:
             logging.error(msg)
             return None
+        logging.debug('myip: %s' % myip, self.verbose)
         eip = self.get_eip_by_addr(myip)
         if eip:
             logging.debug('EIP: %s associated with %s' % (eip, eip.instance_id),
@@ -367,13 +368,15 @@ class C3Instance(object):
         if self.node_db:
             logging.debug('Checking for EIP', self.verbose)
             eip = self.get_eip(steal)
+        else:
+            logging.info('No external data source is defined, skipping')
         if eip:
             logging.debug(
                 'Will re-associate EIP %s to %s' %
                 (eip.public_ip, self.inst_id), self.verbose)
             self.reeip = eip
         else:
-            logging.info('No external data source is defined, skipping')
+            self.reeip = None
 
     def destroy_eip(self):
         ''' Destroy EIP address associated with an EC2 instance '''
