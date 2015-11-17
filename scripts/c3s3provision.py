@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 # Copyright 2015 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -100,8 +100,8 @@ def generate_entries(user, config):
 def get_tags(config, verbose):
     ''' Get bucket cost tags from config '''
     cluster_config = c3.utils.config.ClusterConfig(
-        file=config,
-        overrides={},
+        ini_file=config,
+        prv_type='s3',
         verbose=verbose,
         no_defaults=True)
     return cluster_config.get_tagset()

@@ -328,13 +328,13 @@ class ClusterConfig(object):
             self.read_files(
                 [self.personal_defaults, self.defaults,
                  "%s-%s" % (self.defaults, self.account_name), self.classfile])
-        self.get_meta_data()
-        self.server_datacenter = self.get_cg_region()
         self.read_sections(prv_type)
 
     def read_sections(self, prv_type):
         ''' Read sections based on provisioning type '''
         if prv_type == 'ec2':
+            self.get_meta_data()
+            self.server_datacenter = self.get_cg_region()
             if self.ini.has_section('ebs'):
                 self.read_ebs_config()
             if self.ini.has_section('elb'):
@@ -344,12 +344,16 @@ class ClusterConfig(object):
             if self.ini.has_section('raid'):
                 self.read_raid_config()
         elif prv_type == 'rds':
+            self.get_meta_data()
+            self.server_datacenter = self.get_cg_region()
             if self.ini.has_section('rds_provision'):
                 self.read_rds_config()
             if self.ini.has_section('rds_securitygroup'):
                 self.read_rds_sg_config()
             if self.ini.has_section('rds_parameters'):
                 self.read_rds_pg_config()
+        elif prv_type == 's3':
+            pass
 
     def get_meta_data(self):
         ''' Get metadata from classfile '''
