@@ -24,9 +24,9 @@ setup(name='C3',
         "Intended Audience :: System Administrators ",
         ],
       scripts=[
-        'scripts/C3EC2Provision.py'
-        'scripts/c3s3provision.py'
-        'scripts/c3nv2route53.py'
+        'scripts/C3EC2Provision.py',
+        'scripts/c3s3provision.py',
+        'scripts/c3nv2route53.py',
         ],
       author='Jesse Escobedo',
       author_email='jesse@moda.bz',
