@@ -14,7 +14,7 @@ requires = [
     ]
 
 setup(name='C3',
-      version='0.1',
+      version='0.2',
       description='CloudCloudCloud',
       long_description=README + '\n\n' + CHANGELOG,
       classifiers=[
@@ -25,9 +25,11 @@ setup(name='C3',
         ],
       scripts=[
         'scripts/C3EC2Provision.py'
+        'scripts/c3s3provision.py'
+        'scripts/c3nv2route53.py'
         ],
       author='Jesse Escobedo',
-      author_email='jesse.escobedo@citygridmedia.com',
+      author_email='jesse@moda.bz',
       url='',
       license='Apache',
       keywords='C3 AWS automation cgm cloud devops',
