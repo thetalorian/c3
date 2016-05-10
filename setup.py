@@ -7,6 +7,7 @@ CHANGELOG = open(os.path.join(here, 'CHANGELOG.rst')).read()
 
 requires = [
     'boto==2.38.0',
+    'moto==0.4.24',
     'Zambi==1.0',
     'nvlib==1.0',
     'ipaddr==2.1.11',
