@@ -64,10 +64,10 @@ class C3S3Bucket(object):
         except Exception:
             raise
 
-    def set_tags(self, tagset):
+    def set_tags(self, tagset, verbose):
         ''' Set the cost tags for a bucket '''
         try:
-            tagger = cgm.utils.tag.cgTagger()
-            tagger.addTags([self.bucket], tagset)
+            tagger = c3.utils.tagger.Tagger(self.conn, verbose=verbose)
+            tagger.add_tags([self.bucket], tagset)
         except Exception:
             raise
