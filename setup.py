@@ -26,9 +26,9 @@ setup(
       "Intended Audience :: System Administrators ",
       ],
     scripts=[
-      'scripts/C3EC2Provision.py',
-      'scripts/c3s3provision.py',
-      'scripts/c3nv2route53.py',
+      'scripts/kloudiEC2.py',
+      'scripts/kloudiS3.py',
+      'scripts/kloudinv2route53.py',
     ],
     author='Jesse Escobedo',
     author_email='jesse@moda.bz',

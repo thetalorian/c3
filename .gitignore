@@ -2,5 +2,5 @@
 __pycache__/
 *.py[cod]
 .coverage
-C3.egg-info/
+kloudi.py.egg-info/
 .eggs/
