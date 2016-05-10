@@ -13,9 +13,10 @@ requires = [
     'ipaddr==2.1.11',
     ]
 
-setup(name='C3',
+setup(name='c3',
+      package=['c3'],
       version='0.2',
-      description='CloudCloudCloud',
+      description='CloudCloudCloud - Provisions AWS services from easy to read ini configs',
       long_description=README + '\n\n' + CHANGELOG,
       classifiers=[
         "Programming Language :: Python",
@@ -30,7 +31,7 @@ setup(name='C3',
       ],
       author='Jesse Escobedo',
       author_email='jesse@moda.bz',
-      url='',
+      url='https://github.com/jesco39/c3',
       license='Apache',
       keywords='C3 AWS automation cgm cloud devops',
       packages=find_packages(),
