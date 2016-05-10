@@ -14,8 +14,8 @@ requires = [
     ]
 
 setup(
-    name='c3',
-    package=['c3'],
+    name='C3',
+    package=['C3'],
     version='0.2',
     description='CloudCloudCloud - Provisions AWS services from easy to read ini configs',
     long_description=README + '\n\n' + CHANGELOG,
