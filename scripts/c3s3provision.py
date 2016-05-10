@@ -72,7 +72,7 @@ def send_to_aws(data, account, bucket, tagset, verbose):
     print 'INFO: Setting tags'
     if verbose:
         print 'INFO: TAGS:\n%s' % tagset
-    s3_bucket.set_tags(tagset)
+    s3_bucket.set_tags(tagset, verbose)
     if data:
         print 'INFO: Setting bucket policy'
         if verbose:
