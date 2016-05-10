@@ -17,10 +17,10 @@ import os
 import re
 import sys
 import ConfigParser
-import c3.aws.ec2.ebs
-import c3.utils.naming
-import c3.utils.accounts
-from c3.utils import logging
+import kloudi.aws.ec2.ebs
+import kloudi.utils.naming
+import kloudi.utils.accounts
+from kloudi.utils import logging
 from ConfigParser import SafeConfigParser
 
 
@@ -382,8 +382,8 @@ class ClusterConfig(object):
             return self.get_azs()[0][:-1]
 
     def get_cg_region(self):
-        ''' Return region from c3.utils.naming.get_aws_dc '''
-        return c3.utils.naming.get_aws_dc(self.get_aws_region())
+        ''' Return region from kloudi.utils.naming.get_aws_dc '''
+        return kloudi.utils.naming.get_aws_dc(self.get_aws_region())
 
     def read_files(self, conf_files):
         ''' Read in ini files '''
@@ -728,7 +728,7 @@ class ClusterConfig(object):
                 if remote[:5] == 'CIDR:':
                     self.sgrp.add_cidr(proto, prt1, prt2, remote[5:])
                 elif remote[:4] == 'Net:':
-                    cidr = c3.utils.naming.get_cidr(remote[4:])
+                    cidr = kloudi.utils.naming.get_cidr(remote[4:])
                     if not cidr:
                         raise InvalidCIDRNameError(
                             "Network '%s' is invalid" % remote[4:])
@@ -736,13 +736,13 @@ class ClusterConfig(object):
                 elif remote[:3] == 'SG:':
                     acct, sgrp = remote[3:].split("/")
                     if acct == 'self':
-                        acctid = c3.utils.accounts.get_account_id(
+                        acctid = kloudi.utils.accounts.get_account_id(
                             account_name=self.get_aws_account())
                     elif acct == 'amazon-elb':
                         logging.debug('acctid set to amazon-elb', self.verbose)
                         acctid = 'amazon-elb'
                     else:
-                        acctid = c3.utils.accounts.get_account_id(
+                        acctid = kloudi.utils.accounts.get_account_id(
                             account_name=acct)
                         logging.debug('%s == %s' % (acct, acctid), self.verbose)
                     if acctid:
@@ -777,7 +777,7 @@ class ClusterConfig(object):
             if re.match('.*rule', rule[0]):
                 (rtype, rvalue) = rule[1].split(':')
                 if rtype == 'Net':
-                    cidr = c3.utils.naming.get_cidr(rvalue)
+                    cidr = kloudi.utils.naming.get_cidr(rvalue)
                     if cidr:
                         logging.debug('Appending RDS CIDR rule %s' % cidr,
                                     self.verbose)
@@ -789,9 +789,9 @@ class ClusterConfig(object):
                 elif rtype == 'SG':
                     (oid, sid) = rvalue.split('/')
                     if oid != 'self':
-                        acctid = c3.utils.accounts.get_account_id(oid)
+                        acctid = kloudi.utils.accounts.get_account_id(oid)
                     else:
-                        acctid = c3.utils.accounts.get_account_id(
+                        acctid = kloudi.utils.accounts.get_account_id(
                             self.get_aws_account())
                     if acctid:
                         logging.debug(

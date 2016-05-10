@@ -15,7 +15,7 @@
 ''' This module Manages tagging '''
 import os
 import boto.s3.tagging
-from c3.utils import logging
+from kloudi.utils import logging
 from boto.exception import EC2ResponseError
 from boto.exception import S3ResponseError
 
@@ -41,7 +41,7 @@ def validate_tag(tname, tvalue):
 
 
 class Tagger(object):
-    ''' C3 tagger object '''
+    ''' Kloudi tagger object '''
     def __init__(self, conn, tagnames=None, verbose=False):
         self.conn = conn
         self.verbose = verbose

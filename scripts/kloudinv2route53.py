@@ -21,8 +21,8 @@ works only on AWS hostnames (CNAMEs).
 import argparse
 from zambi import ZambiConn
 from nvlib import Nventory
-from c3.utils.graphite import Graphite
-from c3.aws.route53.hostedzone import HostedZone
+from kloudi.utils.graphite import Graphite
+from kloudi.aws.route53.hostedzone import HostedZone
 
 
 class Nv2Route53(object):
@@ -97,7 +97,7 @@ def parser_setup():
     parser.add_argument('-c',
                         action='store',
                         dest='comment',
-                        default='Managed by c3-nv2route53.py',
+                        default='Managed by kloudi-nv2route53.py',
                         help='Set Route53 record comment')
     parser.add_argument('-g',
                         action='store_true',

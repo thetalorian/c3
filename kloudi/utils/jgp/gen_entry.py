@@ -17,7 +17,7 @@ to generates statement policies'''
 import re
 import sys
 import ConfigParser
-from c3.utils import logging
+from kloudi.utils import logging
 
 
 def read_config(config):

@@ -12,24 +12,24 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-''' Tests for c3.aws modules '''
+''' Tests for kloudi.aws modules '''
 
 import os
 import sys
 import moto
-import c3.utils.config
-from c3.aws.ec2 import ebs
-from c3.aws.ec2 import elb
+import kloudi.utils.config
+from kloudi.aws.ec2 import ebs
+from kloudi.aws.ec2 import elb
 from zambi import ZambiConn
-from c3.aws.ec2 import instances
+from kloudi.aws.ec2 import instances
 from nose.tools import assert_equal
 from nose.tools import assert_raises
-from c3.aws.ec2 import security_groups
+from kloudi.aws.ec2 import security_groups
 from boto.exception import EC2ResponseError
 
 
-class TestC3Cluster(object):
-    ''' testMatch class for C3Cluster '''
+class TestKloudiCluster(object):
+    ''' testMatch class for KloudiCluster '''
     def __init__(self):
         mock = moto.ec2.mock_ec2()
         mock.start()
@@ -37,23 +37,23 @@ class TestC3Cluster(object):
         cmgr = ZambiConn(mapfile=mapfile)
         os.environ['AWS_CRED_DIR'] = os.getcwd() + '/tests'
         self.conn = cmgr.get_connection('opsqa')
-        self.ec2mock = TestC3Instance()
-        self.cluster = instances.C3Cluster(self.conn)
+        self.ec2mock = TestKloudiInstance()
+        self.cluster = instances.KloudiCluster(self.conn)
 
     def test_cluster_instances(self):
-        ''' Test c3 cluster instances '''
+        ''' Test kloudi cluster instances '''
         self.cluster.get_instances(instance_ids=['i-12345'])
         assert self.cluster.instances == []
-        cluster = instances.C3Cluster(self.conn, 'devtst')
+        cluster = instances.KloudiCluster(self.conn, 'devtst')
         assert cluster.instances == []
         self.ec2mock.test_mock_instance()
         self.cluster.get_instances(instance_ids=[self.ec2mock.ec2.inst_id])
         assert self.cluster.get_instance_ids() == [self.ec2mock.ec2.inst_id]
         self.cluster.add_instance('aws1fake1')
-        assert self.cluster.c3instances[1] == 'aws1fake1'
+        assert self.cluster.kloudiinstances[1] == 'aws1fake1'
 
     def test_cluster_destroy(self):
-        ''' Test c3 cluster destroy '''
+        ''' Test kloudi cluster destroy '''
         self.ec2mock.test_mock_instance()
         self.cluster.get_instances(instance_ids=[self.ec2mock.ec2.inst_id])
         assert self.cluster.destroy() == 1
@@ -73,8 +73,8 @@ class TestC3Cluster(object):
         assert self.cluster.wake() == 1
 
 
-class TestC3Instance(object):
-    ''' testMatch class for C3Instance'''
+class TestKloudiInstance(object):
+    ''' testMatch class for KloudiInstance'''
     def __init__(self):
         mock = moto.ec2.mock_ec2()
         mock.start()
@@ -82,7 +82,7 @@ class TestC3Instance(object):
         cmgr = ZambiConn(mapfile=mapfile)
         os.environ['AWS_CRED_DIR'] = os.getcwd() + '/tests'
         self.conn = cmgr.get_connection('opsqa')
-        self.ec2 = instances.C3Instance(self.conn)
+        self.ec2 = instances.KloudiInstance(self.conn)
 
     def test_mock_instance(self):
         ''' Test mock for ec2 instance '''
@@ -98,7 +98,7 @@ class TestC3Instance(object):
         assert instances.wait_for_instance(self.ec2) == True
 
     def test_get_instance_objects(self):
-        ''' Test c3 instance get methods '''
+        ''' Test kloudi instance get methods '''
         self.test_mock_instance()
         assert self.ec2.get_id() == self.ec2.inst_id
         assert self.ec2.get_non_root_volumes() == {}
@@ -120,8 +120,8 @@ class TestC3Instance(object):
         assert self.ec2.set_eip(eip.public_ip) == True
 
 
-class TestC3EBS(object):
-    ''' test Match class for C3EBS '''
+class TestKloudiEBS(object):
+    ''' test Match class for KloudiEBS '''
     def __init__(self):
         mock = moto.ec2.mock_ec2()
         mock.start()
@@ -129,8 +129,8 @@ class TestC3EBS(object):
         cmgr = ZambiConn(mapfile=mapfile)
         os.environ['AWS_CRED_DIR'] = os.getcwd() + '/tests'
         conn = cmgr.get_connection('opsqa')
-        self.ebs = ebs.C3EBS(conn)
-        self.ec2mock = TestC3Instance()
+        self.ebs = ebs.KloudiEBS(conn)
+        self.ec2mock = TestKloudiInstance()
 
     def test_mock_volume(self):
         ''' Test mock for ebs volumes '''
@@ -158,8 +158,8 @@ class TestC3EBS(object):
         assert self.ebs.delete_volume('vol-12345') == None
 
 
-class TestC3ELB(object):
-    ''' testMatch class for C3ELB '''
+class TestKloudiELB(object):
+    ''' testMatch class for KloudiELB '''
     def __init__(self):
         self.cconfig = self.get_test_config()
         mock = moto.elb.mock_elb()
@@ -177,17 +177,17 @@ class TestC3ELB(object):
         os.environ['AWS_BASE_DIR'] = os.getcwd() + '/tests'
         os.environ['HOME'] = os.getcwd() + '/tests/confs'
         config = os.getcwd() + '/tests/confs/devpro.ini'
-        return c3.utils.config.ClusterConfig(
+        return kloudi.utils.config.ClusterConfig(
             ini_file=config, account_name='opsqa')
 
     def test_create_elb(self):
         ''' Test create ELB '''
-        self.elb = elb.C3ELB(
+        self.elb = elb.KloudiELB(
             self.conn, 'aws1dviptst1', self.cconfig.get_elb_config())
         assert self.elb.created == True
 
-class TestC3SecurityGroups(object):
-    ''' testMatch class for C3SecurityGroups '''
+class TestKloudiSecurityGroups(object):
+    ''' testMatch class for KloudiSecurityGroups '''
     def __init__(self):
         mock = moto.ec2.mock_ec2()
         mock.start()

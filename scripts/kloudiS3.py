@@ -18,11 +18,11 @@ import json
 import os
 import sys
 import optparse
-import c3.utils.config
-from c3.utils.jgp import gen_entry
-from c3.utils.jgp import statement
-from c3.utils import accounts
-from c3.aws.s3.bucket import C3S3Bucket
+import kloudi.utils.config
+from kloudi.utils.jgp import gen_entry
+from kloudi.utils.jgp import statement
+from kloudi.utils import accounts
+from kloudi.aws.s3.bucket import KloudiS3Bucket
 from zambi import ZambiConn
 
 
@@ -67,7 +67,7 @@ def send_to_aws(data, account, bucket, tagset, verbose):
     ''' Creates a connection to AWS and sends data '''
     conn_manager = ZambiConn()
     conn = conn_manager.get_connection(account, service='s3')
-    s3_bucket = C3S3Bucket(conn, bucket)
+    s3_bucket = KloudiS3Bucket(conn, bucket)
     print 'INFO: Updating %s:%s' % (account, bucket)
     print 'INFO: Setting tags'
     if verbose:
@@ -99,7 +99,7 @@ def generate_entries(user, config):
 
 def get_tags(config, verbose):
     ''' Get bucket cost tags from config '''
-    cluster_config = c3.utils.config.ClusterConfig(
+    cluster_config = kloudi.utils.config.ClusterConfig(
         ini_file=config,
         prv_type='s3',
         verbose=verbose,

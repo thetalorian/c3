@@ -2,11 +2,11 @@ Changelog
 =========
 Current Release (0.2)
 ------------------
-* C3: CloudCloudCloud Manages automation of AWS accounts and services.
+* kloudi: Manages automation of AWS accounts and services.
 
 0.2
 ~~~~~~~
-* feature: initial public release, S3 provisioning
+* feature: initial public release, S3 provisioning, name change to kloudi
 
 
 0.1
