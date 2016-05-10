@@ -15,7 +15,7 @@
 ''' Manages AWS security groups '''
 from time import sleep
 from boto.exception import EC2ResponseError
-from c3.utils import logging
+from kloudi.utils import logging
 
 
 class SecurityGroups(object):
@@ -37,7 +37,7 @@ class SecurityGroups(object):
 
     def create(self):
         ''' Creates a new Security Group '''
-        desc = '%s C3 SG auto group' % self.name
+        desc = '%s Kloudi SG auto group' % self.name
         try:
             return self.conn.create_security_group(self.name, desc)
         except EC2ResponseError, msg:

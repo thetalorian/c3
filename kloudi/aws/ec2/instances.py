@@ -15,7 +15,7 @@
 ''' This module manages EC2 clusters and instance objects '''
 import time
 import socket
-from c3.utils import logging
+from kloudi.utils import logging
 from boto.exception import EC2ResponseError
 
 
@@ -40,7 +40,7 @@ def wait_for_instance(instance, desired_state="up", timeout=120, verbose=False):
     return False
 
 
-class C3Cluster(object):
+class KloudiCluster(object):
     ''' The cluster specifc to ct_env and ct_class. '''
     def __init__(self, conn, name=None, node_db=None, verbose=None):
         self.conn = conn
@@ -48,12 +48,12 @@ class C3Cluster(object):
         self.node_db = node_db
         self.verbose = verbose
         self.instances = list()
-        self.c3instances = list()
+        self.kloudiinstances = list()
         if self.name is not None:
             self.get_instances()
 
     def get_instances(self, instance_ids=None):
-        ''' Get both instances and C3instances '''
+        ''' Get both instances and Kloudiinstances '''
         if instance_ids:
             all_instances = None
             instances = list()
@@ -76,9 +76,9 @@ class C3Cluster(object):
                 self.instances = sgrp.instances()
             except EC2ResponseError, msg:
                 logging.error(msg.message)
-        # we should really use C3Instances for everything
+        # we should really use KloudiInstances for everything
         for inst in self.instances:
-            self.c3instances.append(C3Instance(
+            self.kloudiinstances.append(KloudiInstance(
                 self.conn, inst_id=inst.id,
                 node_db=self.node_db, verbose=self.verbose))
         return self.instances
@@ -90,14 +90,14 @@ class C3Cluster(object):
             ids.append(iid.id)
         return ids
 
-    def add_instance(self, c3instance):
+    def add_instance(self, kloudiinstance):
         ''' Add instance to cluster. '''
-        self.c3instances.append(c3instance)
+        self.kloudiinstances.append(kloudiinstance)
 
     def destroy(self):
         ''' Terminates instances in cluster. '''
         count = 0
-        for iid in self.c3instances:
+        for iid in self.kloudiinstances:
             if iid.get_state() not in ['terminated']:
                 if iid.destroy():
                     logging.info(
@@ -109,45 +109,45 @@ class C3Cluster(object):
             else:
                 logging.warn('%s already teriminated' % iid.name)
                 count += 1
-        if count != len(self.c3instances):
+        if count != len(self.kloudiinstances):
             logging.warn(
                 'Asked for %d but only %d terminated' %
-                (len(self.c3instances), count))
+                (len(self.kloudiinstances), count))
         return count
 
     def hibernate(self):
         ''' Hibernate instances in cluster. '''
         count = 0
-        for iid in self.c3instances:
+        for iid in self.kloudiinstances:
             if iid.hibernate():
                 logging.info('Waiting for %s to stop' % iid.name)
                 if wait_for_instance(iid, desired_state='down',
                                      verbose=self.verbose):
                     count += 1
-        if count != len(self.c3instances):
+        if count != len(self.kloudiinstances):
             logging.warn(
                 'Asked for %d but only %d stopped' %
-                (len(self.c3instances), count))
+                (len(self.kloudiinstances), count))
         return count
 
     def wake(self):
         ''' Wake instances in cluster. '''
         count = 0
-        for iid in self.c3instances:
+        for iid in self.kloudiinstances:
             if iid.wake():
                 logging.info('Waiting for %s to start' % iid.name)
                 if wait_for_instance(iid, verbose=self.verbose):
                     logging.debug('Wait for %s successful' %
                                   iid.name, self.verbose)
                     count += 1
-        if count != len(self.c3instances):
+        if count != len(self.kloudiinstances):
             logging.warn(
                 'Asked for %d but only %d started' %
-                (len(self.c3instances), count))
+                (len(self.kloudiinstances), count))
         return count
 
 
-class C3Instance(object):
+class KloudiInstance(object):
     ''' Class that  manages instance objects '''
     # pylint:disable=too-many-instance-attributes
     # Required for boto API
@@ -176,7 +176,7 @@ class C3Instance(object):
         # pylint:disable=too-many-arguments
         # Required for boto API
         logging.debug(
-            'C3Instance.start(%s, %s, %s, %s, %s, %s, %s, %s)' %
+            'KloudiInstance.start(%s, %s, %s, %s, %s, %s, %s, %s)' %
             (ami, sshkey, sgs, len(user_data), hostname, isize, zone,
              nodegroups), self.verbose)
         try:

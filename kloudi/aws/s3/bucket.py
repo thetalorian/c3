@@ -13,10 +13,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-import c3.utils.tagger
+import kloudi.utils.tagger
 
 
-class C3S3Bucket(object):
+class KloudiS3Bucket(object):
     ''' This class is used to interface with S3 '''
     def __init__(self, conn, bucket):
         self.conn = conn
@@ -67,7 +67,7 @@ class C3S3Bucket(object):
     def set_tags(self, tagset, verbose):
         ''' Set the cost tags for a bucket '''
         try:
-            tagger = c3.utils.tagger.Tagger(self.conn, verbose=verbose)
+            tagger = kloudi.utils.tagger.Tagger(self.conn, verbose=verbose)
             tagger.add_tags([self.bucket], tagset)
         except Exception:
             raise
