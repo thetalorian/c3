@@ -2,6 +2,6 @@
 __pycache__/
 *.py[cod]
 .coverage
-C3.py.egg-info/
+C3.egg-info/
 .eggs/
 dist/
