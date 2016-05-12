@@ -15,8 +15,8 @@
 ''' Generates JSON Statements for AWS policies '''
 import sys
 import ipaddr
-import kloudi.utils.naming
-from kloudi.utils import logging
+import c3.utils.naming
+from c3.utils import logging
 
 
 def make_statement(user_acct, user, path, action,
@@ -63,8 +63,8 @@ def do_condition(condition):
         item[name] = {}
         if is_ipnetwork(value):
             item[name][prop] = value
-        elif kloudi.utils.naming.get_cidr(value):
-            value = kloudi.utils.naming.get_cidr(value)
+        elif c3.utils.naming.get_cidr(value):
+            value = c3.utils.naming.get_cidr(value)
             item[name][prop] = value
         else:
             item[name][prop] = value

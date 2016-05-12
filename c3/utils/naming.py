@@ -19,9 +19,9 @@ Library for CGM naming conventions
 import os
 import re
 import sys
-import kloudi.utils.accounts
+import c3.utils.accounts
 from nvlib import Nventory
-from kloudi.utils import logging
+from c3.utils import logging
 
 
 def find_available_hostnames(group, count=1, account=None,
@@ -82,7 +82,7 @@ def get_logging_bucket_name(account_id=None):
     '''
     Get the standardized bucket name for account_id or the current env account
     '''
-    account_name = kloudi.utils.accounts.get_account_name(
+    account_name = c3.utils.accounts.get_account_name(
         account_id=account_id)
     if account_name:
         return "cgs3log-%s" % account_name

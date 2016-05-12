@@ -18,19 +18,19 @@ import sys
 import time
 import optparse
 import boto.sqs
-import kloudi.utils.accounts
-import kloudi.utils.naming
-import kloudi.utils.tagger
-import kloudi.utils.config
-import kloudi.aws.ec2.elb
-import kloudi.aws.ec2.ebs
-import kloudi.aws.ec2.security_groups
+import c3.utils.accounts
+import c3.utils.naming
+import c3.utils.tagger
+import c3.utils.config
+import c3.aws.ec2.elb
+import c3.aws.ec2.ebs
+import c3.aws.ec2.security_groups
 from nvlib import Nventory
 from zambi import ZambiConn
-from kloudi.utils import logging
+from c3.utils import logging
 from boto.exception import SQSError
 from boto.exception import EC2ResponseError
-from kloudi.aws.ec2.instances import KloudiInstance
+from c3.aws.ec2.instances import C3Instance
 
 
 def parser_setup():
@@ -195,10 +195,10 @@ def nv_connect(nv_ini):
 
 def cluster_tagger(conn, verbose=None):
     ''' Initialize the tagger. '''
-    return kloudi.utils.tagger.Tagger(conn, verbose=verbose)
+    return c3.utils.tagger.Tagger(conn, verbose=verbose)
 
 
-class KloudiEC2Provision(object):
+class C3EC2Provision(object):
     ''' This class manages provisioning in AWS. '''
     def __init__(self, opts):
         self.opts = opts
@@ -216,15 +216,15 @@ class KloudiEC2Provision(object):
         if self.opts.aws_account:
             account_name = self.opts.aws_account
         else:
-            account_name = kloudi.utils.config.get_account_from_conf(
+            account_name = c3.utils.config.get_account_from_conf(
                 conf=self.opts.config_file)
         try:
             # Pass account name and load all the defaults
-            self.cconfig = kloudi.utils.config.ClusterConfig(
+            self.cconfig = c3.utils.config.ClusterConfig(
                 ini_file=self.opts.config_file,
                 account_name=account_name,
                 verbose=self.opts.verbose)
-        except kloudi.utils.config.ConfigNotFoundException, msg:
+        except c3.utils.config.ConfigNotFoundException, msg:
             logging.error(msg)
             sys.exit(1)
         # this one MUST be "is not None", or a value of 0 won't work
@@ -238,7 +238,7 @@ class KloudiEC2Provision(object):
             logging.debug("setting AZs", self.opts.verbose)
             try:
                 self.cconfig.set_azs(self.opts.azs)
-            except kloudi.utils.config.InvalidAZError, msg:
+            except c3.utils.config.InvalidAZError, msg:
                 logging.error(msg)
                 sys.exit(1)
         if self.opts.size:
@@ -286,13 +286,13 @@ class KloudiEC2Provision(object):
         node_db = nv_connect(self.opts.nv_ini)
         self.conn = self.aws_conn('ec2')
         try:
-            cgc = kloudi.aws.ec2.instances.KloudiCluster(
+            cgc = c3.aws.ec2.instances.C3Cluster(
                 self.conn, name=self.cconfig.get_primary_sg(),
                 node_db=node_db, verbose=self.opts.verbose)
-        except kloudi.aws.ec2.instances.KloudiClusterNotFoundException, msg:
+        except c3.aws.ec2.instances.C3ClusterNotFoundException, msg:
             logging.error("Problem finding cluster (%s)" % (msg))
             sys.exit(1)
-        except kloudi.aws.ec2.instances.TooManySGsException, error:
+        except c3.aws.ec2.instances.TooManySGsException, error:
             logging.error("Found multiple SGs! (%s)" % (error))
             sys.exit(1)
         except EC2ResponseError, msg:
@@ -304,12 +304,12 @@ class KloudiEC2Provision(object):
         ''' Get a connection to the ELB service. '''
         conn_elb = self.aws_conn('elb')
         try:
-            kloudielb = kloudi.aws.ec2.elb.KloudiELB(
+            c3elb = c3.aws.ec2.elb.C3ELB(
                 conn_elb, self.cconfig.get_elb_name(),
                 self.cconfig.get_elb_config(), find_only=find_only)
         except EC2ResponseError, msg:
             logging.error(msg.message)
-        return kloudielb
+        return c3elb
 
     def cluster_destroy(self):
         ''' Destroy mode, delete all components for this cluster. '''
@@ -319,12 +319,12 @@ class KloudiEC2Provision(object):
         count = cgc.destroy()
         logging.info('Terminated %d instance(s)' % count)
         if self.cconfig.elb.enabled:
-            kloudielb = self.elb_connection()
-            if kloudielb.destroy():
-                logging.info('ELB %s deleted' % kloudielb.name)
+            c3elb = self.elb_connection()
+            if c3elb.destroy():
+                logging.info('ELB %s deleted' % c3elb.name)
             else:
                 logging.error('Deleting ELB %s failed')
-        sgrp = kloudi.aws.ec2.security_groups.SecurityGroups(
+        sgrp = c3.aws.ec2.security_groups.SecurityGroups(
             self.conn, self.cconfig.get_primary_sg(), find_only=True)
         if sgrp.destroy():
             logging.info("Security Group %s removed" % sgrp.name)
@@ -356,20 +356,20 @@ class KloudiEC2Provision(object):
         ''' Check the status of a cluster. '''
         logging.info('Checking status for %s' % self.cconfig.get_primary_sg())
         cgc = self.cluster()
-        for instance in cgc.kloudiinstances:
+        for instance in cgc.c3instances:
             elbm = None
             elb_hc = None
             elb_azs = None
             ebs_vols = None
             try:
-                kloudielb = self.elb_connection()
+                c3elb = self.elb_connection()
             except TypeError:
-                kloudielb = None
-            if kloudielb:
-                if kloudielb.instance_configured(instance.inst_id):
-                    elbm = kloudielb.get_dns()
-                    elb_hc = kloudielb.get_hc()
-                    elb_azs = kloudielb.get_azs()
+                c3elb = None
+            if c3elb:
+                if c3elb.instance_configured(instance.inst_id):
+                    elbm = c3elb.get_dns()
+                    elb_hc = c3elb.get_hc()
+                    elb_azs = c3elb.get_azs()
             ebsm = instance.get_ebs_optimized()
             eipm = instance.get_associated_eip()
             vols = instance.get_non_root_volumes()
@@ -419,7 +419,7 @@ class KloudiEC2Provision(object):
 
     def sg_rules(self):
         ''' Find/create SG rules. '''
-        primary_sg = kloudi.aws.ec2.security_groups.SecurityGroups(
+        primary_sg = c3.aws.ec2.security_groups.SecurityGroups(
             self.conn, self.cconfig.get_primary_sg())
         # add CIDR rules
         for rule in self.cconfig.get_cidr_rules():
@@ -475,7 +475,7 @@ class KloudiEC2Provision(object):
                     self.cconfig.get_count(), self.cconfig.get_size(),
                     self.cconfig.get_azs(), self.cconfig.get_ami()),
                 self.opts.verbose)
-            self.hostnames = kloudi.utils.naming.find_available_hostnames(
+            self.hostnames = c3.utils.naming.find_available_hostnames(
                 self.cconfig.get_primary_sg(), self.cconfig.get_count(),
                 self.cconfig.get_aws_account(),
                 self.cconfig.get_aws_region(), 'ctgrd.com', node_db)
@@ -484,7 +484,7 @@ class KloudiEC2Provision(object):
                 'Creating new servers: %s' % self.hostnames,
                 self.opts.verbose)
             for host in self.hostnames:
-                servers[host] = KloudiInstance(
+                servers[host] = C3Instance(
                     conn=self.conn, node_db=node_db,
                     verbose=self.opts.verbose)
                 userdata = self.cconfig.get_user_data(
@@ -536,7 +536,7 @@ class KloudiEC2Provision(object):
 
     def create_ebs(self, used_az, host, instance_id):
         ''' Create new EBS volumes. '''
-        cgebs = kloudi.aws.ec2.ebs.KloudiEBS(self.conn)
+        cgebs = c3.aws.ec2.ebs.C3EBS(self.conn)
         for ebsv in self.cconfig.get_ebs_config():
             logging.info(
                 "Creating EBS volume %s for %s" %
@@ -593,7 +593,7 @@ class KloudiEC2Provision(object):
     def setup_elb(self, servers, azs_used):
         ''' Createst the cluster ELB. '''
         self.cconfig.elb.set_azs(azs_used)
-        kloudielb = self.elb_connection(find_only=False)
+        c3elb = self.elb_connection(find_only=False)
         for host in self.hostnames:
             try:
                 instance_id = servers[host].get_id()
@@ -601,11 +601,11 @@ class KloudiEC2Provision(object):
                 logging.error(msg)
                 instance_id = None
             if instance_id:
-                kloudielb.add_instances([instance_id])
+                c3elb.add_instances([instance_id])
 
     def attach_ebs(self):
         ''' Attaches EBS volumes to instances. '''
-        cgebs = kloudi.aws.ec2.ebs.KloudiEBS(self.conn)
+        cgebs = c3.aws.ec2.ebs.C3EBS(self.conn)
         for vol_id in self.volume_instances:
             logging.info("Attaching EBS volume %s on %s to %s" % (
                 vol_id, self.volume_instances[vol_id],
@@ -659,7 +659,7 @@ def main():
     if opts.config_file is None:
         parser.print_help()
         parser.error('"-c CONFIG_FILE" is required')
-    KloudiEC2Provision(opts)
+    C3EC2Provision(opts)
 
 
 if __name__ == '__main__':

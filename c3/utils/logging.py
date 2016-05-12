@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-''' Logging interface for Kloudi '''
+''' Logging interface for C3 '''
 import sys
 import datetime
 

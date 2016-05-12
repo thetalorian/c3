@@ -14,10 +14,10 @@ requires = [
     ]
 
 setup(
-    name='kloudi',
-    package=['kloudi'],
+    name='C3',
+    package=['C3'],
     version='0.2',
-    description='kloudi - Provisions AWS services from easy to read ini configs',
+    description='C3 - Provisions AWS services from easy to read ini configs',
     long_description=README + '\n\n' + CHANGELOG,
     classifiers=[
       "Programming Language :: Python",
@@ -26,15 +26,15 @@ setup(
       "Intended Audience :: System Administrators ",
       ],
     scripts=[
-      'scripts/kloudiEC2.py',
-      'scripts/kloudiS3.py',
-      'scripts/kloudinv2route53.py',
+      'scripts/c3ec2.py',
+      'scripts/c3s3.py',
+      'scripts/c3nv2route53.py',
     ],
     author='Jesse Escobedo',
     author_email='jesse@moda.bz',
-    url='https://github.com/jesco39/kloudi',
+    url='https://github.com/jesco39/c3',
     license='Apache',
-    keywords='kloudi C3 AWS automation cloud devops',
+    keywords='C3 AWS automation cloud devops',
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,

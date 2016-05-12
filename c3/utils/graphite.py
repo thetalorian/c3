@@ -17,7 +17,7 @@
 import re
 import socket
 import time
-from kloudi.utils import logging
+from c3.utils import logging
 
 
 class Graphite(object):

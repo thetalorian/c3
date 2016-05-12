@@ -14,11 +14,11 @@
 #
 """ This module is used for interfacig with AWS EBS """
 from time import sleep
-from kloudi.utils import logging
+from c3.utils import logging
 from boto.exception import EC2ResponseError
 
 
-class KloudiEBS(object):
+class C3EBS(object):
     """ This class is used to manage EBS """
     def __init__(self, conn):
         self.conn = conn

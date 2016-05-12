@@ -12,65 +12,65 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-''' Tests for kloudi.utils '''
+''' Tests for c3.utils '''
 
 import os
 import sys
 import moto
 import random
-import kloudi.utils.config
-import kloudi.utils.graphite
-import kloudi.utils.naming as kloudinaming
-import kloudi.utils.accounts as kloudiaccounts
-import kloudi.utils.jgp.gen_entry as kloudigen_entry
-import kloudi.utils.jgp.statement as kloudistatement
+import c3.utils.config
+import c3.utils.graphite
+import c3.utils.naming as c3naming
+import c3.utils.accounts as c3accounts
+import c3.utils.jgp.gen_entry as c3gen_entry
+import c3.utils.jgp.statement as c3statement
 from nose.tools import assert_equal
 from nose.tools import assert_raises
-from kloudi.utils.graphite import Graphite
+from c3.utils.graphite import Graphite
 
 
 def test_get_account_name():
-    ''' Test function in kloudiaccounts'''
+    ''' Test function in c3accounts'''
     os.environ['AWS_ACCOUNT_ID'] = '123456789011'
     mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
-    account = kloudiaccounts.get_account_name(mapfile=mapfile)
+    account = c3accounts.get_account_name(mapfile=mapfile)
     assert account == None
     os.environ['AWS_ACCOUNT_ID'] = ''
-    assert kloudiaccounts.get_account_name() == False
+    assert c3accounts.get_account_name() == False
     os.environ['AWS_ACCOUNT_ID'] = '123456789012'
-    account = kloudiaccounts.get_account_name(mapfile=mapfile)
+    account = c3accounts.get_account_name(mapfile=mapfile)
     assert account == 'opsqa'
 
 
 def test_get_account_id():
-    ''' Test function in kloudiaccounts'''
+    ''' Test function in c3accounts'''
     mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
-    account = kloudiaccounts.get_account_id(
+    account = c3accounts.get_account_id(
         account_name='opsprod', mapfile=mapfile)
     assert account == '210987654321'
     os.environ['AWS_ACCOUNT_ID'] == '123456789012'
-    account = kloudiaccounts.get_account_id()
+    account = c3accounts.get_account_id()
     assert account == '123456789012'
-    account = kloudiaccounts.get_account_id(
+    account = c3accounts.get_account_id(
         account_name='opsqa', mapfile=mapfile)
     assert account == '123456789012'
 
 
 def test_translate_account():
-    ''' Test function in kloudiaccounts'''
+    ''' Test function in c3accounts'''
     mapfile = os.getcwd() + '/tests/confs/account_aliases_map_FAKE.txt'
-    assert kloudiaccounts.translate_account(mapfile=mapfile) == False
+    assert c3accounts.translate_account(mapfile=mapfile) == False
     os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
-    name = kloudiaccounts.translate_account(account_id='123456789012')
+    name = c3accounts.translate_account(account_id='123456789012')
     assert name == 'opsqa'
 
 
 def test_find_available_hostnames():
-    ''' Test function in kloudi.utils.naming '''
-    hosts = kloudinaming.find_available_hostnames(
+    ''' Test function in c3.utils.naming '''
+    hosts = c3naming.find_available_hostnames(
         'devweb', count=2)
     assert hosts == False
-    hosts = kloudinaming.find_available_hostnames(
+    hosts = c3naming.find_available_hostnames(
         'devweb', count=2, account='opsqa',
         region='us-east-1',domain='ctgrd.com')
     assert hosts == ['aws1devweb1.opsqa.ctgrd.com',
@@ -78,52 +78,52 @@ def test_find_available_hostnames():
 
 
 def test_gen_hostname():
-    ''' Test function in kloudi.utils.naming '''
-    host = kloudinaming.gen_hostname('devweb', 1, 'dev')
+    ''' Test function in c3.utils.naming '''
+    host = c3naming.gen_hostname('devweb', 1, 'dev')
     assert host == 'aws1devweb1.dev.ctgrd.com'
-    host = kloudinaming.gen_hostname('zzzweb', 1, 'dev')
+    host = c3naming.gen_hostname('zzzweb', 1, 'dev')
     assert host == False
 
 
 def test_get_aws_dc():
-    ''' Test function in kloudi.utils.naming '''
-    assert kloudinaming.get_aws_dc('us-east-1') == 'aws1'
-    assert kloudinaming.get_aws_dc('us-west-1') == 'aws2'
-    assert kloudinaming.get_aws_dc('eu-west-1') == 'aws3'
-    assert kloudinaming.get_aws_dc('us-east') == False
+    ''' Test function in c3.utils.naming '''
+    assert c3naming.get_aws_dc('us-east-1') == 'aws1'
+    assert c3naming.get_aws_dc('us-west-1') == 'aws2'
+    assert c3naming.get_aws_dc('eu-west-1') == 'aws3'
+    assert c3naming.get_aws_dc('us-east') == False
 
 
 def test_get_logging_bucket_name():
-    ''' Test fuction in kloudi.utils.naming '''
+    ''' Test fuction in c3.utils.naming '''
     os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
-    bucket = kloudinaming.get_logging_bucket_name(account_id='123456789012')
+    bucket = c3naming.get_logging_bucket_name(account_id='123456789012')
     assert bucket == 'cgs3log-opsqa'
-    bucket = kloudinaming.get_logging_bucket_name(account_id='123456789011')
+    bucket = c3naming.get_logging_bucket_name(account_id='123456789011')
     assert bucket == False
 
 
 def test_get_cidr():
-    ''' Test get_cidr function in kloudi.utils.naming '''
+    ''' Test get_cidr function in c3.utils.naming '''
     os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
-    cidr = kloudinaming.get_cidr('**PUBLIC**')
+    cidr = c3naming.get_cidr('**PUBLIC**')
     assert cidr == '0.0.0.0/0'
 
 
 def test_jgp_read_config():
-    ''' Test read_config in kloudi.utils.jgp '''
+    ''' Test read_config in c3.utils.jgp '''
     config = 'fake.ini'
-    assert kloudigen_entry.read_config(config) == False
+    assert c3gen_entry.read_config(config) == False
     config = os.getcwd() + '/tests/confs/opsqa-devzzz.ini'
-    ini = kloudigen_entry.read_config(config)
+    ini = c3gen_entry.read_config(config)
     assert ini.sections() == ['s3:get*,s3:list*', 's3:*',
                               's3:putObject', 's3:badtest']
 
 
 def test_jgp_gen_s3_entry():
-    ''' Test gen_s3_entry in kloudi.utils.jgp '''
+    ''' Test gen_s3_entry in c3.utils.jgp '''
     config = os.getcwd() + '/tests/confs/opsqa-devzzz.ini'
-    ini = kloudigen_entry.read_config(config)
-    entry = kloudigen_entry.gen_s3_entry(ini, 'devzzz', 'opsqa')
+    ini = c3gen_entry.read_config(config)
+    entry = c3gen_entry.gen_s3_entry(ini, 'devzzz', 'opsqa')
     assert entry == [
         'Allow|s3:get*,s3:list*|devzzz|opsqa|mybucket/*|'\
         'IpAddress,aws:SourceIp,216.1.187.128/27',
@@ -131,8 +131,8 @@ def test_jgp_gen_s3_entry():
         'Deny|s3:*|devzzz|opsqa|mybucket/foobar/barbaz|empty']
 
 def test_jgp_make_statement():
-    ''' Test make_statement in kloudi.utils.jgp.statement '''
-    statement = kloudistatement.make_statement(
+    ''' Test make_statement in c3.utils.jgp.statement '''
+    statement = c3statement.make_statement(
         '086441151436', 'root', 'cgm-cloudtrail/*',
         's3:GetBucketAcl','Allow', 'empty')
     assert statement == {
@@ -140,7 +140,7 @@ def test_jgp_make_statement():
         'Resource': ['arn:aws:s3:::cgm-cloudtrail/*'],
         'Effect': 'Allow',
         'Principal': {'AWS': ['arn:aws:iam::086441151436:root']}}
-    statement = kloudistatement.make_statement(
+    statement = c3statement.make_statement(
         '086441151436','root',
         'cgm-cloudtrail/AWSLogs/150620942615/*',
         's3:PutObject','Allow',
@@ -155,79 +155,79 @@ def test_jgp_make_statement():
 
 
 def test_jgp_do_principal():
-    ''' Test do_principal in kloudi.utils.jgp.statement '''
-    statement = kloudistatement.do_principal('cidr-networks','')
+    ''' Test do_principal in c3.utils.jgp.statement '''
+    statement = c3statement.do_principal('cidr-networks','')
     assert statement == {'AWS': '*'}
-    statement = kloudistatement.do_principal('blah','root')
+    statement = c3statement.do_principal('blah','root')
     assert statement == {'AWS': ['arn:aws:iam::blah:root']}
-    statement = kloudistatement.do_principal('blah','user')
+    statement = c3statement.do_principal('blah','user')
     assert statement == {'AWS': ['arn:aws:iam::blah:user/user']}
 
 
 def test_jgp_do_condition():
-    ''' Test do_condition in kloudi.utils.jgp '''
-    cond = kloudistatement.do_condition('IpAddress,aws:SourceIp,**PUBLIC**')
+    ''' Test do_condition in c3.utils.jgp '''
+    cond = c3statement.do_condition('IpAddress,aws:SourceIp,**PUBLIC**')
     assert cond == {'IpAddress': {'aws:SourceIp': '0.0.0.0/0'}}
-    cond = kloudistatement.do_condition(
+    cond = c3statement.do_condition(
         'StringEquals,s3:x-amz-acl,bucket-owner-full-control')
     assert cond == {
         'StringEquals': {'s3:x-amz-acl': 'bucket-owner-full-control'}}
-    cond = kloudistatement.do_condition('invalid')
+    cond = c3statement.do_condition('invalid')
     assert cond == False
-    cond = kloudistatement.do_condition('1,2,3,4')
+    cond = c3statement.do_condition('1,2,3,4')
     assert cond == False
 
 class TestConfigExcpetions(object):
-    ''' Test class for kloudi.utils.config exceptions '''
+    ''' Test class for c3.utils.config exceptions '''
     def __init__(self):
         self.fake_ini = os.getcwd() + '/tests/fake/devpro.ini'
         self.bad_ini = os.getcwd() + '/tests/exceptions/devpro.ini'
         self.good_ini = os.getcwd() + '/tests/confs/devpro.ini'
-        self.kloudiconfig = kloudi.utils.config
+        self.c3config = c3.utils.config
 
     def test_exception_invalid_config(self):
         ''' Testing ConfigNotFoundException exception '''
-        with assert_raises(self.kloudiconfig.ConfigNotFoundException) as msg:
-            self.kloudiconfig.ClusterConfig(
+        with assert_raises(self.c3config.ConfigNotFoundException) as msg:
+            self.c3config.ClusterConfig(
                 ini_file=self.fake_ini, no_defaults=True)
         assert_equal(msg.exception.value, 'Invalid config: %s' % self.fake_ini)
 
     def test_exception_get_azs(self):
         ''' Test exception for get azs '''
-        cconfig = self.kloudiconfig.ClusterConfig(
+        cconfig = self.c3config.ClusterConfig(
             ini_file=self.good_ini)
-        with assert_raises(self.kloudiconfig.InvalidAZError) as msg:
+        with assert_raises(self.c3config.InvalidAZError) as msg:
             cconfig.set_azs('us-east-1aa')
         assert_equal(msg.exception.value, "AZ 'us-east-1aa' is invalid")
 
     def test_exception_too_many_amis(self):
         ''' Test exception for TooManyAMIsError '''
-        with assert_raises(self.kloudiconfig.TooManyAMIsError) as msg:
-            raise self.kloudiconfig.TooManyAMIsError('error')
+        with assert_raises(self.c3config.TooManyAMIsError) as msg:
+            raise self.c3config.TooManyAMIsError('error')
         assert_equal(msg.exception.value, 'error')
 
     def test_exception_get_resolved_ami(self):
         ''' Test get resolved ami exception '''
-        cconfig = self.kloudiconfig.ClusterConfig(
+        cconfig = self.c3config.ClusterConfig(
             ini_file=self.good_ini)
-        with assert_raises(self.kloudiconfig.AMINotFoundError) as msg:
+        with assert_raises(self.c3config.AMINotFoundError) as msg:
             cconfig.get_resolved_ami(node_db=None)
         assert_equal(msg.exception.value,
                      "No AMI matching 'ami_hvm_centos' found")
 
 
 class TestEC2Config(object):
-    ''' testMatch class for kloudi.utils.config '''
+    ''' testMatch class for c3.utils.config '''
     def __init__(self):
         mapfile = os.getcwd() + '/tests/confs/account_aliases_map.txt'
         os.environ['AWS_CONF_DIR'] = os.getcwd() + '/tests/confs'
         os.environ['AWS_BASE_DIR'] = os.getcwd() + '/tests'
         os.environ['HOME'] = os.getcwd() + '/tests/confs'
         self.config = os.getcwd() + '/tests/confs/devpro.ini'
-        self.cconfig = kloudi.utils.config.ClusterConfig(
+        self.cconfig = c3.utils.config.ClusterConfig(
             ini_file=self.config, account_name='opsqa')
-        self.config_func = kloudi.utils.config
-        self.solo_cconfig = kloudi.utils.config.ClusterConfig(
+        self.config_func = c3.utils.config
+        self.solo_cconfig = c3.utils.config.ClusterConfig(
             ini_file=self.config, account_name='opsqa', no_defaults=True)
 
     def test_get_account_from_conf(self):
@@ -415,10 +415,10 @@ class TestRDSConfig(object):
         os.environ['AWS_BASE_DIR'] = os.getcwd() + '/tests'
         os.environ['HOME'] = os.getcwd() + '/tests/confs'
         self.config = os.getcwd() + '/tests/confs/devpro.ini'
-        self.cconfig = kloudi.utils.config.ClusterConfig(
+        self.cconfig = c3.utils.config.ClusterConfig(
             ini_file=self.config, account_name='opsqa', prv_type='rds')
-        self.config_func = kloudi.utils.config
-        self.solo_cconfig = kloudi.utils.config.ClusterConfig(
+        self.config_func = c3.utils.config
+        self.solo_cconfig = c3.utils.config.ClusterConfig(
             ini_file=self.config, account_name='opsqa',
             prv_type='rds', no_defaults=True)
 
@@ -453,7 +453,7 @@ class TestRDSConfig(object):
             'publicly_accessible': 'True'}
 
 class TestGraphite(object):
-    ''' testMatch class for kloudi.utils.graphite '''
+    ''' testMatch class for c3.utils.graphite '''
     def __init__(self):
         self.graphite = Graphite(server='graphite.dev', debug=True)
         self.name = 'test_metric'

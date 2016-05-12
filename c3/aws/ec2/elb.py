@@ -13,12 +13,12 @@
 #  limitations under the License.
 #
 ''' This module managed ELB objects '''
-from kloudi.utils import logging
+from c3.utils import logging
 from boto.ec2.elb import HealthCheck
 from boto.exception import BotoServerError
 
 
-class KloudiELB(object):
+class C3ELB(object):
     ''' This class is used to manage ELBs '''
     # pylint:disable=too-many-arguments
     # pylint:disable=too-many-instance-attributes

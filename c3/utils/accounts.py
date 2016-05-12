@@ -18,7 +18,7 @@ Utilities to deal with CGM-standard accounts
 
 import os
 import sys
-from kloudi.utils import logging
+from c3.utils import logging
 
 
 def get_account_name(account_id=None, mapfile=None):
