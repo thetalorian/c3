@@ -24,7 +24,7 @@ setup(
       "Programming Language :: Python :: 2.6",
       "Programming Language :: Python :: 2.7",
       "Intended Audience :: System Administrators ",
-      ],
+    ],
     scripts=[
       'scripts/c3ec2.py',
       'scripts/c3s3.py',
