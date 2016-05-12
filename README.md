@@ -1,5 +1,5 @@
 # c3
-c3, because you know you can't get enough of the cloud.
+It stands for CloudCloudCloud, because you know you can't get enough of the cloud.
 
 # Summary
 For those of us who like to ensure the provisioning process is cheap, repeatable, and scalable. C3 is a collection of tools and libaries for AWS that is very easy and very repeatable.
