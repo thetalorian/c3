@@ -32,7 +32,7 @@ setup(
     ],
     author='Jesse Escobedo',
     author_email='jesse@moda.bz',
-    url='https://github.com/jesco39/c3',
+    url='https://github.com/CityGrid/c3',
     license='Apache',
     keywords='C3 AWS automation cloud devops',
     packages=find_packages(),
