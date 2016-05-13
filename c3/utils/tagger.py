@@ -154,10 +154,10 @@ class Tagger(object):
         try:
             logging.debug('Check for existing tags...', self.verbose)
             existing_tags = bucket.get_tags()[0]
+            logging.debug('Existing tags: %s' % existing_tags.to_xml(), self.verbose)
         except S3ResponseError, msg:
             logging.error(msg.message)
             existing_tags = dict()
-        logging.debug('Existing tags: %s' % existing_tags.to_xml(), self.verbose)
         try:
             tags = boto.s3.tagging.Tags()
             tset = boto.s3.tagging.TagSet()
