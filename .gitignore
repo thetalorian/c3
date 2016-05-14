@@ -4,3 +4,4 @@ __pycache__/
 .coverage
 C3.egg-info/
 .eggs/
+dist/

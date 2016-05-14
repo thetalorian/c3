@@ -1,4 +1,4 @@
-# Copyright 2015 CityGrid Media, LLC
+# Copyright 2016 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import os
 import boto.s3.tagging
 from c3.utils import logging
 from boto.exception import EC2ResponseError
+from boto.exception import S3ResponseError
 
 
 def get_validation_file(tname):
@@ -142,51 +143,52 @@ class Tagger(object):
 
     def tag_s3_bucket(self, rid, tagset):
         ''' Tags S3 buckets with complicated s3 tagging shenanigans '''
-        used_tags = list()
+        new_tags = list()
         failed = 0
         logging.info('Tagging S3 bucket %s' % rid)
         try:
             bucket = self.conn.get_bucket(rid)
-        except EC2ResponseError, msg:
+        except S3ResponseError, msg:
             logging.error(msg.message)
             failed += 1
         try:
+            logging.debug('Check for existing tags...', self.verbose)
             existing_tags = bucket.get_tags()[0]
-        except EC2ResponseError, msg:
+            logging.debug('Existing tags: %s' % existing_tags.to_xml(), self.verbose)
+        except S3ResponseError, msg:
             logging.error(msg.message)
             existing_tags = dict()
-        logging.info('Existing tags: %s' % existing_tags)
         try:
             tags = boto.s3.tagging.Tags()
             tset = boto.s3.tagging.TagSet()
-        except EC2ResponseError, msg:
+        except S3ResponseError, msg:
             logging.error(msg.message)
             failed += 1
         for tname, tvalue in tagset.items():
-            if tname not in used_tags:
-                try:
-                    tset.add_tag(tname, tvalue)
-                    used_tags.append(tname)
-                except EC2ResponseError, msg:
-                    logging.error(msg.message)
-                    failed += 1
-            for tag in existing_tags:
-                if tag.key not in used_tags:
-                    logging.info('Tagging %s, %s: %s' %
-                                 (rid, tag.key, tag.value))
-                    try:
-                        tset.add_tag(tag.key, tag.value)
-                        used_tags.append(tag.key)
-                    except EC2ResponseError, msg:
-                        logging.error(msg.message)
-                        failed += 1
-            logging.info('Submitting tagset for S3 bucket')
+            logging.debug('%s:%s is a new tag' % (tname, tvalue), self.verbose)
             try:
-                tags.add_tag_set(tset)
-                bucket.set_tags(tags)
-            except EC2ResponseError, msg:
+                tset.add_tag(tname, tvalue)
+                new_tags.append(tname)
+            except S3ResponseError, msg:
                 logging.error(msg.message)
                 failed += 1
+        for tag in existing_tags:
+            if tag.key not in new_tags:
+                logging.info('Tagging %s, %s: %s' %
+                             (rid, tag.key, tag.value))
+                try:
+                    tset.add_tag(tag.key, tag.value)
+                    new_tags.append(tag.key)
+                except S3ResponseError, msg:
+                    logging.error(msg.message)
+                    failed += 1
+        logging.info('Submitting tagset for S3 bucket')
+        try:
+            tags.add_tag_set(tset)
+            bucket.set_tags(tags)
+        except S3ResponseError, msg:
+            logging.error(msg.message)
+            failed += 1
         if not failed:
             return True
         else:

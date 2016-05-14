@@ -1,11 +1,11 @@
-# C3
+# c3
 It stands for CloudCloudCloud, because you know you can't get enough of the cloud.
 
 # Summary
 For those of us who like to ensure the provisioning process is cheap, repeatable, and scalable. C3 is a collection of tools and libaries for AWS that is very easy and very repeatable.
 
 # Getting started
-Make sure you are using the secret sauce of zambi before using C3.
+Make sure you are using the secret sauce of zambi before using c3.
 see, https://github.com/CityGrid/zambi
 
 ```
@@ -17,7 +17,7 @@ We like to ensure the provisioning process is very repeatable. So we suppliment 
 
 For a list of commands and options
 ```
-C3EC2Provision.py -h
+c3ec2.py -h
 ```
 
 # Optional packages

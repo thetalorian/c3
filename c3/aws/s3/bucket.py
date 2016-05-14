@@ -1,5 +1,5 @@
 ''' This module is used for interfacing with AWS S3 '''
-# Copyright 2015 CityGrid Media, LLC
+# Copyright 2016 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -64,10 +64,10 @@ class C3S3Bucket(object):
         except Exception:
             raise
 
-    def set_tags(self, tagset):
+    def set_tags(self, tagset, verbose):
         ''' Set the cost tags for a bucket '''
         try:
-            tagger = cgm.utils.tag.cgTagger()
-            tagger.addTags([self.bucket], tagset)
+            tagger = c3.utils.tagger.Tagger(self.conn, verbose=verbose)
+            tagger.add_tags([self.bucket], tagset)
         except Exception:
             raise

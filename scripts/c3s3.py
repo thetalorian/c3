@@ -1,5 +1,5 @@
 #!/usr/bin/python2.7
-# Copyright 2015 CityGrid Media, LLC
+# Copyright 2016 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ def send_to_aws(data, account, bucket, tagset, verbose):
     print 'INFO: Setting tags'
     if verbose:
         print 'INFO: TAGS:\n%s' % tagset
-    s3_bucket.set_tags(tagset)
+    s3_bucket.set_tags(tagset, verbose)
     if data:
         print 'INFO: Setting bucket policy'
         if verbose:

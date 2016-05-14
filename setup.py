@@ -13,28 +13,32 @@ requires = [
     'ipaddr==2.1.11',
     ]
 
-setup(name='C3',
-      version='0.1',
-      description='CloudCloudCloud',
-      long_description=README + '\n\n' + CHANGELOG,
-      classifiers=[
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 2.6",
-        "Programming Language :: Python :: 2.7",
-        "Intended Audience :: System Administrators ",
-        ],
-      scripts=[
-        'scripts/C3EC2Provision.py'
-        ],
-      author='Jesse Escobedo',
-      author_email='jesse.escobedo@citygridmedia.com',
-      url='',
-      license='Apache',
-      keywords='C3 AWS automation cgm cloud devops',
-      packages=find_packages(),
-      include_package_data=True,
-      zip_safe=False,
-      install_requires=requires,
-      tests_require=requires,
-      test_suite='nose.collector',
-      )
+setup(
+    name='C3',
+    package=['C3'],
+    version='0.2',
+    description='C3 - Provisions AWS services from easy to read ini configs',
+    long_description=README + '\n\n' + CHANGELOG,
+    classifiers=[
+      "Programming Language :: Python",
+      "Programming Language :: Python :: 2.6",
+      "Programming Language :: Python :: 2.7",
+      "Intended Audience :: System Administrators ",
+    ],
+    scripts=[
+      'scripts/c3ec2.py',
+      'scripts/c3s3.py',
+      'scripts/c3nv2route53.py',
+    ],
+    author='Jesse Escobedo',
+    author_email='jesse@moda.bz',
+    url='https://github.com/CityGrid/c3',
+    license='Apache',
+    keywords='C3 AWS automation cloud devops',
+    packages=find_packages(),
+    include_package_data=True,
+    zip_safe=False,
+    install_requires=requires,
+    tests_require=requires,
+    test_suite='nose.collector',
+)
