@@ -13,7 +13,7 @@ pip install c3
 ```
 
 # Usage
-We like to ensure the provisioning process is very repeatable. So we suppliment the CLI tools we have home grown with ini config files that we create and store in git for revision contorl management. See the examples directory for a set of config examples on our github page, https://github.com/CityGrid/c3/tree/master/tests/confs
+We like to ensure the provisioning process is very repeatable. So we suppliment the CLI tools we have home grown with ini config files that we create and store in git for revision control management. See the examples directory for a set of config examples on our github page, https://github.com/CityGrid/c3/tree/master/tests/confs
 
 For a list of commands and options
 ```
