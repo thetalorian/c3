@@ -831,3 +831,7 @@ class ClusterConfig(object):
     def get_rds_config(self):
         ''' Returns dictonary of RDS config items. '''
         return self.rds.get_config()
+
+    def get_placement_group(self):
+        ''' Returns placement group '''
+        return self.get_ini("cluster", "placement_group", str)

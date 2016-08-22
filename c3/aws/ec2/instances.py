@@ -171,7 +171,8 @@ class C3Instance(object):
             self.state = self._instance.state
 
     def start(self, ami, sshkey, sgs, user_data, hostname,
-              isize, zone, nodegroups, allocateeips, use_ebsoptimized):
+              isize, zone, nodegroups, allocateeips, use_ebsoptimized,
+              placement_group=None):
         ''' Starts an EC2 instance '''
         # pylint:disable=too-many-arguments
         # Required for boto API
@@ -182,7 +183,8 @@ class C3Instance(object):
         try:
             self._reservation = self.conn.run_instances(
                 ami, 1, 1, sshkey, sgs, user_data, None, isize, zone,
-                None, None, False, None, None, ebs_optimized=use_ebsoptimized)
+                None, None, False, None, None, ebs_optimized=use_ebsoptimized,
+                placement_group=placement_group)
         except EC2ResponseError, msg:
             logging.error(msg.message)
             return None
