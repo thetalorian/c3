@@ -502,7 +502,8 @@ class C3EC2Provision(object):
                         host, self.cconfig.get_size(), used_az,
                         self.cconfig.get_node_groups(),
                         self.cconfig.get_allocate_eips(),
-                        self.cconfig.get_use_ebs_optimized())
+                        self.cconfig.get_use_ebs_optimized(),
+                        self.cconfig.get_placement_group())
                     if instance:
                         success += 1
                         break
