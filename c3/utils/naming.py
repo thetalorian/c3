@@ -25,7 +25,7 @@ from c3.utils import logging
 
 
 def find_available_hostnames(group, count=1, account=None,
-                             region=None, domain=None, node_db=None):
+                             region=None, domain=None, node_db=None, activeonly=True):
     '''
     Return the first <count> appropriate hostnames not already in node_db
     '''
@@ -41,7 +41,7 @@ def find_available_hostnames(group, count=1, account=None,
         'sclass': group[3:],
         'acct': account,
         'domain': domain}
-    node_data = node_db.get_nodes(data)
+    node_data = node_db.get_nodes(data, activeonly=True)
     if node_data:
         for node in node_data:
             nodes.append(node['name'])
